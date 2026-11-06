@@ -1,0 +1,11 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# Exports and local server data
+/export/
+/data/
+*.tmp
+
+# Textures Godot extracts from the .glb models on import
+assets/towers/*_albedo.png
