@@ -71,7 +71,7 @@ const SNUFFERS := {
 	"big_shellback": {name = "Big Shellback", hp = 900.0, armor = 4.0, speed = 0.8, reward = 150, damage = 40.0, air = false, size = 2.2,
 		sheds = [0.66, 0.33], shed_count = 3},
 }
-const HP_GROWTH := 0.22  # +22% health per wave
+const HP_GROWTH := 0.18  # +18% health per wave
 
 
 static func wave_hp_scale(wave: int) -> float:

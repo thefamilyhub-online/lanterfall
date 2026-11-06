@@ -189,7 +189,7 @@ func _build_landmarks() -> void:
 			gh.rotation.y = PI / 2
 			if lg:
 				gh.add_child(lg)
-				_gate_bars = lg.find_child("Bars", true, false) as Node3D
+				_gate_bars = lg.find_child("Bars*", true, false) as Node3D
 			if _gate_bars == null:
 				_gate_bars = Node3D.new()
 				for j in 4:
@@ -384,7 +384,7 @@ func _make_snuffer(type: String) -> Dictionary:
 	body_root.add_child(m)
 	body_root.scale = Vector3.ONE * d.size
 	var wings: Array = []
-	for wn in ["Wing_L", "Wing_R"]:
+	for wn in ["Wing_L*", "Wing_R*"]:
 		var wnode := m.find_child(wn, true, false)
 		if wnode:
 			wings.append(wnode)
@@ -589,7 +589,7 @@ func update_frame(delta: float) -> void:
 		if s.air:
 			body.position.y = 1.0 + sin(_time * 3.0 + s.phase) * 0.12
 			for w in s.wings:
-				(w as Node3D).rotation.z = sin(_time * 22.0 + s.phase) * 0.7 * (1 if w.name == "Wing_L" else -1)
+				(w as Node3D).rotation.z = sin(_time * 22.0 + s.phase) * 0.7 * (1 if String(w.name).begins_with("Wing_L") else -1)
 		else:
 			body.position.y = absf(sin(_time * 9.0 + s.phase)) * 0.08
 	for n in _heroes:
