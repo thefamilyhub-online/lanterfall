@@ -8,6 +8,8 @@ Built with **Godot 4.7** (GDScript) for Windows and macOS, with a dedicated serv
 
 ## Status: Phase 1 (first playable)
 
+![In-game HUD](art/ui/hud.png)
+
 ![Pip, Snuffers, heroes and Gumdrop Glade props](art/characters/phase1_models.png)
 
 **Gumdrop Glade**, 15 surprise waves and a boss, for 1–8 players:
@@ -69,11 +71,15 @@ Then open **UDP 7777** in the VPS firewall. Players join with the server's addre
 | `scripts/data.gd` | All the numbers: towers, Snuffers, waves, heroes, combos, the map |
 | `scripts/world.gd` | The match: waves, combat, coins, heroes, combos, gate (server-side) |
 | `scripts/board_view.gd` | Everything you see on the board |
-| `scripts/hud.gd` | In-game HUD |
+| `scripts/hud.gd` | In-game HUD and results screen |
+| `scripts/ui_theme.gd` | The Lanternfall look: buttons, panels, ribbon, fonts |
+| `scripts/card_button.gd` | Lantern-glow cards for tower and hero picks |
 | `assets/` | Models used by the game (textures baked in) |
-| `art/` | Blender source files, renders and `art/tools/lanternfall_models.py` (ignored by Godot) |
+| `art/` | Blender source files, renders, `art/tools/lanternfall_models.py`, and `art/tools/make_ui.py` (draws the UI pieces) — ignored by Godot |
 | `server/` | Dockerfile and compose file for the dedicated server |
 
 ## Credits
 
-Design and code: the Lanternfall family team. Some future assets may come from the KayKit collections by Kay Lousberg (CC0).
+Design and code: the Lanternfall family team. UI layout ideas loosely inspired by community game-UI kits; all UI art is drawn by `art/tools/make_ui.py`.
+
+Fonts: [Lilita One](https://fonts.google.com/specimen/Lilita+One) and [Fredoka](https://fonts.google.com/specimen/Fredoka), both under the SIL Open Font License (see `assets/fonts/`). Some future assets may come from the KayKit collections by Kay Lousberg (CC0).

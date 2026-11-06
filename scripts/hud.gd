@@ -1,171 +1,300 @@
 extends CanvasLayer
-## In-match HUD for Gumdrop Glade. Reads the World's state; buttons call the
-## World's client actions. Keys mirror every button for quick play.
+## In-match HUD for Gumdrop Glade, in the Lanternfall style (see ui_theme.gd).
+## Reads the World's state; buttons call the World's client actions. Keys
+## mirror every button for quick play.
 
 const D := preload("res://scripts/data.gd")
+const UI := preload("res://scripts/ui_theme.gd")
+const CardButton := preload("res://scripts/card_button.gd")
 
 var world: Node
+var preview_results := false   # test helper: show the results screen now
 var _wave_label: Label
 var _phase_label: Label
 var _glow_bar: ProgressBar
+var _glow_pct: Label
 var _coins_label: Label
 var _team_box: VBoxContainer
-var _tower_buttons := {}
+var _tower_cards := {}
 var _ability_btn: Button
+var _ability_icon: TextureRect
 var _ready_btn: Button
 var _gate_btn: Button
 var _panel: PanelContainer
+var _panel_card: NinePatchRect
+var _panel_icon: TextureRect
 var _panel_title: Label
+var _panel_flames: HBoxContainer
+var _panel_owner: Label
 var _panel_info: Label
 var _upgrade_btn: Button
 var _sell_btn: Button
-var _message: Label
-var _banner: Label
+var _ribbon: PanelContainer
+var _ribbon_label: Label
 var _message_t := 0.0
 var _team_sig := ""
+var _results: Control
+var _results_title: Label
+var _results_sub: Label
+var _results_stats: HBoxContainer
+var _results_team: GridContainer
+var _results_timer: Label
+var _results_sig := ""
 
 
 func setup(w: Node) -> void:
 	world = w
 	var root := Control.new()
+	root.theme = UI.theme()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
-
-	# top-left: map, wave, phase, Pip's glow
-	var tl := _panel_box(root, Control.PRESET_TOP_LEFT, Vector2(16, 16))
-	var title := _label(tl, "GUMDROP GLADE", 22, Color("#FFC44D"))
-	title.uppercase = true
-	_wave_label = _label(tl, "", 20, Color.WHITE)
-	_phase_label = _label(tl, "", 16, Color("#D9D2F2"))
-	var gr := HBoxContainer.new()
-	tl.add_child(gr)
-	_label(gr, "Pip's glow", 16, Color("#FFE3A3"))
-	_glow_bar = ProgressBar.new()
-	_glow_bar.custom_minimum_size = Vector2(200, 18)
-	_glow_bar.max_value = D.PIP_MAX
-	_glow_bar.show_percentage = false
-	var fill := StyleBoxFlat.new()
-	fill.bg_color = Color("#FFC44D")
-	fill.set_corner_radius_all(6)
-	_glow_bar.add_theme_stylebox_override("fill", fill)
-	gr.add_child(_glow_bar)
-
-	# top-right: coins and team
-	var top_right := _panel_box(root, Control.PRESET_TOP_RIGHT, Vector2(-16, 16))
-	_coins_label = _label(top_right, "", 26, Color("#FFD34D"))
-	_coins_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_label(top_right, "Team", 14, Color("#B9A8E8"))
-	_team_box = VBoxContainer.new()
-	top_right.add_child(_team_box)
-
-	# bottom bar
-	var bottom := VBoxContainer.new()
-	bottom.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	bottom.offset_left = 16
-	bottom.offset_right = -16
-	bottom.offset_top = -132
-	bottom.offset_bottom = -12
-	bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bottom.alignment = BoxContainer.ALIGNMENT_END
-	root.add_child(bottom)
-	_message = _label(bottom, "", 22, Color.WHITE)
-	_message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_message.add_theme_constant_override("outline_size", 6)
-	_message.add_theme_color_override("font_outline_color", Color("#1B1638"))
-	var help := _label(bottom, "WASD walk · 1–4 pick tower · click to build or select · Q ability · R ready · U upgrade · X sell", 14, Color("#D9D2F2"))
-	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	bottom.add_child(row)
-	for i in D.TOWER_ORDER.size():
-		var t: String = D.TOWER_ORDER[i]
-		var b := Button.new()
-		b.toggle_mode = true
-		b.custom_minimum_size = Vector2(128, 52)
-		b.pressed.connect(world.select_type.bind(t))
-		b.tooltip_text = D.TOWERS[t].blurb
-		row.add_child(b)
-		_tower_buttons[t] = b
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(spacer)
-	_ability_btn = _button(row, "", world.use_ability, 150)
-	_gate_btn = _button(row, "", world.close_gate, 130)
-	_ready_btn = _button(row, "", world.toggle_ready, 160)
-
-	# selected tower panel (above the bottom bar, right)
-	_panel = PanelContainer.new()
-	_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	_panel.offset_left = -300
-	_panel.offset_right = -16
-	_panel.offset_top = -330
-	_panel.offset_bottom = -150
-	_panel.add_theme_stylebox_override("panel", _box_style())
-	root.add_child(_panel)
-	var pv := VBoxContainer.new()
-	_panel.add_child(pv)
-	_panel_title = _label(pv, "", 20, Color("#FFC44D"))
-	_panel_info = _label(pv, "", 15, Color("#E8E2F8"))
-	_panel_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	var pb := HBoxContainer.new()
-	pv.add_child(pb)
-	_upgrade_btn = _button(pb, "", world.upgrade_selected, 130)
-	_sell_btn = _button(pb, "", world.sell_selected, 120)
-	_panel.visible = false
-
-	_banner = _label(root, "", 54, Color("#FFC44D"))
-	_banner.set_anchors_preset(Control.PRESET_CENTER)
-	_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_banner.add_theme_constant_override("outline_size", 12)
-	_banner.add_theme_color_override("font_outline_color", Color("#1B1638"))
-	_banner.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_banner.visible = false
+	_build_top_left(root)
+	_build_top_right(root)
+	_build_ribbon(root)
+	_build_bottom(root)
+	_build_tower_panel(root)
+	_build_results(root)
 	refresh()
 
 
-func _box_style() -> StyleBoxFlat:
-	var s := StyleBoxFlat.new()
-	s.bg_color = Color(0.1, 0.08, 0.2, 0.78)
-	s.set_corner_radius_all(12)
-	s.content_margin_left = 14
-	s.content_margin_right = 14
-	s.content_margin_top = 10
-	s.content_margin_bottom = 10
-	return s
-
-
-func _panel_box(root: Control, preset: int, at: Vector2) -> VBoxContainer:
+# ---------------------------------------------------------------- top left
+func _build_top_left(root: Control) -> void:
 	var p := PanelContainer.new()
-	p.add_theme_stylebox_override("panel", _box_style())
-	p.set_anchors_preset(preset)
-	if preset == Control.PRESET_TOP_RIGHT:
-		p.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	p.position = at
+	p.position = Vector2(16, 14)
 	root.add_child(p)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	p.add_child(row)
+	UI.picture(row, UI.icon("pip"), Vector2(78, 78))
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 2)
+	row.add_child(col)
+	UI.label(col, "GUMDROP GLADE", 15, UI.LILAC, true, 4)
+	_wave_label = UI.label(col, "", 30, UI.GOLD, true, 8)
+	_phase_label = UI.label(col, "", 16, UI.CREAM)
+	var gr := HBoxContainer.new()
+	gr.add_theme_constant_override("separation", 6)
+	col.add_child(gr)
+	UI.picture(gr, UI.tex("flame"), Vector2(24, 24))
+	_glow_bar = ProgressBar.new()
+	_glow_bar.custom_minimum_size = Vector2(200, 24)
+	_glow_bar.max_value = D.PIP_MAX
+	_glow_bar.show_percentage = false
+	_glow_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	gr.add_child(_glow_bar)
+	_glow_pct = UI.label(gr, "", 16, Color("#FFE3A3"), true, 4)
+
+
+# ---------------------------------------------------------------- top right
+func _build_top_right(root: Control) -> void:
+	var col := VBoxContainer.new()
+	col.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	col.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	col.position = Vector2(-16, 14)
+	col.alignment = BoxContainer.ALIGNMENT_BEGIN
+	col.add_theme_constant_override("separation", 8)
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(col)
+	var pill := UI.panel(col, "Pill")
+	pill.size_flags_horizontal = Control.SIZE_SHRINK_END
+	var pr := HBoxContainer.new()
+	pr.add_theme_constant_override("separation", 8)
+	pill.add_child(pr)
+	UI.picture(pr, UI.tex("coin"), Vector2(36, 36))
+	_coins_label = UI.label(pr, "", 28, UI.GOLD, true, 6)
+	_coins_label.custom_minimum_size.x = 64
+	var team := UI.panel(col, "SoftPanel")
+	team.custom_minimum_size.x = 320
+	var tv := VBoxContainer.new()
+	tv.add_theme_constant_override("separation", 4)
+	team.add_child(tv)
+	UI.label(tv, "TEAM", 15, UI.LILAC, true, 4)
+	_team_box = VBoxContainer.new()
+	_team_box.add_theme_constant_override("separation", 4)
+	tv.add_child(_team_box)
+
+
+# ---------------------------------------------------------------- ribbon messages
+func _build_ribbon(root: Control) -> void:
+	_ribbon = PanelContainer.new()
+	_ribbon.theme_type_variation = "Ribbon"
+	_ribbon.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_ribbon.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_ribbon.position.y = 18
+	_ribbon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(_ribbon)
+	_ribbon_label = UI.label(_ribbon, "", 24, Color.WHITE, true, 8)
+	_ribbon_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_ribbon.visible = false
+
+
+# ---------------------------------------------------------------- bottom bar
+func _build_bottom(root: Control) -> void:
+	var bottom := HBoxContainer.new()
+	bottom.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	bottom.offset_left = 24
+	bottom.offset_right = -20
+	bottom.offset_top = -200
+	bottom.offset_bottom = -30
+	bottom.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(bottom)
+
+	var left := VBoxContainer.new()
+	left.alignment = BoxContainer.ALIGNMENT_END
+	left.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	left.add_theme_constant_override("separation", 8)
+	bottom.add_child(left)
+	var help := UI.label(left, "WASD walk · 1–4 pick · click build/select · Q ability · R ready · U upgrade · X sell", 14, UI.LILAC, false, 4)
+	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	var cards := HBoxContainer.new()
+	cards.add_theme_constant_override("separation", 14)
+	left.add_child(cards)
+	for i in D.TOWER_ORDER.size():
+		var t: String = D.TOWER_ORDER[i]
+		var c := CardButton.new()
+		cards.add_child(c)
+		c.setup(UI.icon(t), D.TOWERS[t].name, Vector2(108, 132), str(i + 1))
+		c.tooltip_text = D.TOWERS[t].blurb
+		c.pressed.connect(world.select_type.bind(t))
+		_tower_cards[t] = c
+
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bottom.add_child(spacer)
+
+	var right := HBoxContainer.new()
+	right.alignment = BoxContainer.ALIGNMENT_END
+	right.size_flags_vertical = Control.SIZE_SHRINK_END
+	right.add_theme_constant_override("separation", 10)
+	bottom.add_child(right)
+	_ability_btn = UI.button(right, "", "PurpleButton", world.use_ability, Vector2(200, 76))
+	_ability_btn.alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_ability_icon = TextureRect.new()
+	_ability_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_ability_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_ability_icon.position = Vector2(10, 6)
+	_ability_icon.size = Vector2(52, 56)
+	_ability_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ability_btn.add_child(_ability_icon)
+	_gate_btn = UI.button(right, "", "Button", world.close_gate, Vector2(160, 76))
+	_ready_btn = UI.button(right, "", "GreenButton", world.toggle_ready, Vector2(210, 76))
+	_ready_btn.add_theme_font_size_override("font_size", 22)
+
+
+# ---------------------------------------------------------------- selected tower
+func _build_tower_panel(root: Control) -> void:
+	_panel = PanelContainer.new()
+	_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_panel.offset_right = -20
+	_panel.offset_bottom = -126
+	_panel.custom_minimum_size = Vector2(380, 0)
+	root.add_child(_panel)
 	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	_panel.add_child(v)
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 12)
+	v.add_child(head)
+	var holder := Control.new()
+	holder.custom_minimum_size = Vector2(80, 96)
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	head.add_child(holder)
+	_panel_card = NinePatchRect.new()
+	_panel_card.size = holder.custom_minimum_size
+	for side in ["left", "right", "top"]:
+		_panel_card.set("patch_margin_" + side, 18)
+	_panel_card.patch_margin_bottom = 40
+	holder.add_child(_panel_card)
+	_panel_icon = TextureRect.new()
+	_panel_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_panel_icon.position = Vector2(10, 8)
+	_panel_icon.size = Vector2(60, 66)
+	_panel_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	holder.add_child(_panel_icon)
+	var hv := VBoxContainer.new()
+	hv.add_theme_constant_override("separation", 2)
+	hv.alignment = BoxContainer.ALIGNMENT_CENTER
+	head.add_child(hv)
+	_panel_title = UI.label(hv, "", 26, UI.GOLD, true, 7)
+	_panel_flames = HBoxContainer.new()
+	hv.add_child(_panel_flames)
+	_panel_owner = UI.label(hv, "", 15, UI.LILAC)
+	_panel_info = UI.label(v, "", 16, UI.CREAM)
+	_panel_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_panel_info.custom_minimum_size.x = 340
+	var pb := HBoxContainer.new()
+	pb.add_theme_constant_override("separation", 10)
+	v.add_child(pb)
+	_upgrade_btn = UI.button(pb, "", "GoldButton", world.upgrade_selected, Vector2(190, 64))
+	_upgrade_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_sell_btn = UI.button(pb, "", "RedButton", world.sell_selected, Vector2(130, 64))
+	_panel.visible = false
+
+
+# ---------------------------------------------------------------- results
+func _build_results(root: Control) -> void:
+	_results = Control.new()
+	_results.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.add_child(_results)
+	var dim := ColorRect.new()
+	dim.color = Color(0.03, 0.03, 0.1, 0.62)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_results.add_child(dim)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_results.add_child(center)
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", -26)
+	center.add_child(stack)
+	var rib := UI.panel(stack, "Ribbon")
+	rib.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	rib.z_index = 1
+	rib.custom_minimum_size.x = 460
+	_results_title = UI.label(rib, "", 40, Color.WHITE, true, 10)
+	_results_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var p := UI.panel(stack)
+	p.custom_minimum_size = Vector2(680, 0)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 14)
 	p.add_child(v)
-	return v
+	var gap := Control.new()
+	gap.custom_minimum_size.y = 22
+	v.add_child(gap)
+	_results_sub = UI.label(v, "", 20, UI.CREAM)
+	_results_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_results_stats = HBoxContainer.new()
+	_results_stats.alignment = BoxContainer.ALIGNMENT_CENTER
+	_results_stats.add_theme_constant_override("separation", 14)
+	v.add_child(_results_stats)
+	var tl := UI.label(v, "YOUR TEAM", 18, UI.LILAC, true, 5)
+	tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_results_team = GridContainer.new()
+	_results_team.columns = 4
+	_results_team.add_theme_constant_override("h_separation", 12)
+	_results_team.add_theme_constant_override("v_separation", 12)
+	_results_team.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	v.add_child(_results_team)
+	_results_timer = UI.label(v, "", 17, UI.LILAC)
+	_results_timer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_results.visible = false
 
 
-func _label(parent: Node, text: String, size: int, color: Color) -> Label:
-	var l := Label.new()
-	l.text = text
-	l.add_theme_font_size_override("font_size", size)
-	l.add_theme_color_override("font_color", color)
-	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	parent.add_child(l)
-	return l
-
-
-func _button(parent: Node, text: String, action: Callable, width: int) -> Button:
-	var b := Button.new()
-	b.text = text
-	b.custom_minimum_size = Vector2(width, 52)
-	b.pressed.connect(action)
-	parent.add_child(b)
-	return b
+func _stat_tile(parent: Node, picture: Texture2D, value: String, caption: String) -> void:
+	var t := UI.panel(parent, "Tile")
+	t.custom_minimum_size = Vector2(150, 0)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 0)
+	t.add_child(v)
+	var pic := UI.picture(v, picture, Vector2(48, 48))
+	pic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var a := UI.label(v, value, 28, Color.WHITE, true, 7)
+	a.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var b := UI.label(v, caption, 14, Color("#DCE2FF"), false, 4)
+	b.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 
 func typing() -> bool:
@@ -179,32 +308,29 @@ func refresh() -> void:
 		return
 	var me: String = Net.my_name
 	var hero: String = world.hero_choice.get(me, Net.my_hero)
-	_coins_label.text = "%d coins" % world.my_coins()
-	if world.phase == "victory" or world.phase == "defeat":
-		_banner.visible = true
-		_banner.text = "Victory! Pip is safe!" if world.phase == "victory" else "Pip's light went out…"
-	else:
-		_banner.visible = false
+	_coins_label.text = str(world.my_coins())
 	var w: int = world.wave
 	if world.phase == "build":
 		var next: int = w + 1
-		_wave_label.text = "Next: Big Shellback!" if next == D.BOSS_WAVE else "Next: wave %d of %d" % [next, D.LAST_WAVE]
+		_wave_label.text = "BOSS NEXT!" if next == D.BOSS_WAVE else "WAVE %d / %d" % [next, D.LAST_WAVE]
 	else:
-		_wave_label.text = "Big Shellback!" if w == D.BOSS_WAVE else "Wave %d of %d" % [w, D.LAST_WAVE]
-	for t in _tower_buttons:
-		var b: Button = _tower_buttons[t]
-		b.text = "%d %s\n%d coins" % [D.TOWER_ORDER.find(t) + 1, D.TOWERS[t].name.replace(" ", "\u00a0"), world.build_cost(me, t)]
-		b.button_pressed = (t == world.selected_type and world.selected_cell == null)
+		_wave_label.text = "BIG SHELLBACK!" if w == D.BOSS_WAVE else "WAVE %d / %d" % [w, D.LAST_WAVE]
+	for t in _tower_cards:
+		var c = _tower_cards[t]
+		var cost: int = world.build_cost(me, t)
+		c.set_cost(cost, world.my_coins() >= cost)
+		c.set_selected(t == world.selected_type and world.selected_cell == null)
 	var cd: float = world.hero_cd.get(me, 0.0)
 	var h: Dictionary = D.HEROES[hero]
-	_ability_btn.text = "Q  %s\n%s" % [h.ability, "ready" if cd <= 0.0 else "%ds" % ceili(cd)]
+	_ability_icon.texture = UI.icon(hero)
+	_ability_btn.text = "Q  %s\n%s" % [h.ability, "Ready!" if cd <= 0.0 else "%ds" % ceili(cd)]
 	_ability_btn.disabled = cd > 0.0
 	_ability_btn.tooltip_text = h.ability_text
 	var r: int = int(world.rush.get(me, 0))
 	if r > 0:
-		_ability_btn.text += " · %d cheap left" % r
+		_ability_btn.text = "Q  %s\n%d cheap left" % [h.ability, r]
 	if world.gate_closed_waves > 0:
-		_gate_btn.text = "Gate closed\n%d wave%s left" % [world.gate_closed_waves, "" if world.gate_closed_waves == 1 else "s"]
+		_gate_btn.text = "Gate closed\n%d wave%s" % [world.gate_closed_waves, "" if world.gate_closed_waves == 1 else "s"]
 		_gate_btn.disabled = true
 	elif world.gate_cooldown > 0:
 		_gate_btn.text = "Gate resting\n%d wave%s" % [world.gate_cooldown, "" if world.gate_cooldown == 1 else "s"]
@@ -215,13 +341,14 @@ func refresh() -> void:
 	var am_ready: bool = world.ready_names.has(me)
 	if world.phase == "build":
 		var bonus := int(world.phase_timer) * D.EARLY_CALL_PER_SECOND
-		_ready_btn.text = ("R  Waiting for team…" if am_ready else "R  Ready!\n+%d early bonus" % bonus)
+		_ready_btn.text = "Waiting…" if am_ready else "R  READY!\n+%d bonus" % bonus
 		_ready_btn.disabled = false
 	else:
-		_ready_btn.text = "Wave in progress"
+		_ready_btn.text = "Defend!"
 		_ready_btn.disabled = true
 	_refresh_team()
 	_refresh_panel()
+	_refresh_results()
 
 
 func _refresh_team() -> void:
@@ -236,23 +363,31 @@ func _refresh_team() -> void:
 		for n in names:
 			var row := HBoxContainer.new()
 			row.name = "Row_" + n
-			var l := _label(row, "", 16, Color.WHITE)
-			l.name = "Info"
-			l.custom_minimum_size.x = 230
+			row.add_theme_constant_override("separation", 6)
+			var pic := UI.picture(row, null, Vector2(34, 34))
+			pic.name = "Pic"
+			var nl := UI.label(row, n, 18, Color.WHITE, true, 5)
+			nl.custom_minimum_size.x = 96
+			nl.clip_text = true
+			UI.picture(row, UI.tex("coin"), Vector2(20, 20))
+			var cl := UI.label(row, "", 17, UI.GOLD, true, 4)
+			cl.name = "Coins"
+			cl.custom_minimum_size.x = 44
+			var rl := UI.label(row, "", 15, UI.MINT, true, 4)
+			rl.name = "Ready"
+			rl.custom_minimum_size.x = 54
 			if n != Net.my_name:
-				var g := Button.new()
-				g.text = "Gift %d" % D.GIFT_STEP
-				g.pressed.connect(world.gift_to.bind(n))
-				row.add_child(g)
+				var g := UI.button(row, "Gift %d" % D.GIFT_STEP, "GoldButton", world.gift_to.bind(n), Vector2(84, 40))
+				g.add_theme_font_size_override("font_size", 15)
 			_team_box.add_child(row)
 	for row in _team_box.get_children():
 		var n: String = row.name.substr(4)
-		var info: Label = row.get_node_or_null("Info")
-		if info == null:
+		if row.get_node_or_null("Coins") == null:
 			continue
 		var hero: String = world.hero_choice.get(n, "bramble")
-		var mark := "  ✓ ready" if world.ready_names.has(n) and world.phase == "build" else ""
-		info.text = "%s (%s) · %d%s" % [n, D.HEROES[hero].name, int(world.coins.get(n, 0)), mark]
+		(row.get_node("Pic") as TextureRect).texture = UI.icon(hero)
+		(row.get_node("Coins") as Label).text = str(int(world.coins.get(n, 0)))
+		(row.get_node("Ready") as Label).text = "READY" if world.ready_names.has(n) and world.phase == "build" else ""
 
 
 func _refresh_panel() -> void:
@@ -264,14 +399,22 @@ func _refresh_panel() -> void:
 	var t: Dictionary = world.towers[c]
 	var d: Dictionary = D.TOWERS[t.type]
 	var mine: bool = t.owner == Net.my_name
-	_panel_title.text = "%s%s" % [d.name, "" if d.kind == "wall" else "  · tier %d" % t.tier]
-	var lines := ["Built by %s" % t.owner, d.blurb]
+	_panel_card.texture = UI.tex("card_" + UI.metal_for_tier(t.tier))
+	_panel_icon.texture = UI.icon(t.type)
+	_panel_title.text = d.name
+	for ch in _panel_flames.get_children():
+		ch.queue_free()
+	if d.kind != "wall":
+		UI.tier_flames(_panel_flames, t.tier, 22)
+		UI.label(_panel_flames, "  Tier %d" % t.tier, 15, Color("#FFE3A3"), true, 4)
+	_panel_owner.text = "Built by %s" % t.owner
+	var lines := [d.blurb]
 	if d.kind != "wall":
 		var i: int = t.tier - 1
-		lines.append("Damage %s · range %.1f · %.1f shots/s" % [str(d.damage[i]), world.tower_range(c), d.rate[i]])
+		lines.append("Damage %s · Range %.1f · %.1f shots/s" % [str(d.damage[i]), world.tower_range(c), d.rate[i]])
 	for combo in D.COMBOS:
 		if combo.id in world.combos.get(c, []) and (combo.a == t.type or combo.b == t.type):
-			lines.append("Combo: %s — %s" % [combo.name, combo.text])
+			lines.append("Combo %s: %s" % [combo.name, combo.text])
 	if world.in_glow(c) and d.kind != "wall":
 		lines.append("In Pip's glow: fires 10% faster")
 	if t.oc > 0.0:
@@ -279,14 +422,58 @@ func _refresh_panel() -> void:
 	_panel_info.text = "\n".join(PackedStringArray(lines))
 	var cost: int = world.upgrade_cost(Net.my_name, c)
 	_upgrade_btn.visible = mine and d.kind != "wall"
-	_upgrade_btn.text = "U  Max tier" if cost < 0 else "U  Upgrade\n%d coins" % cost
+	_upgrade_btn.text = "Max tier" if cost < 0 else "U  Upgrade\n%d coins" % cost
 	_upgrade_btn.disabled = cost < 0 or world.my_coins() < cost
 	_sell_btn.visible = mine
 	_sell_btn.text = "X  Sell\n+%d" % world.sell_value(c)
 
 
+func _refresh_results() -> void:
+	var show: bool = world.phase == "victory" or world.phase == "defeat" or preview_results
+	_results.visible = show
+	if not show:
+		_results_sig = ""
+		return
+	var won: bool = world.phase != "defeat"
+	var names: Array = world.coins.keys()
+	names.sort()
+	var built := {}
+	for c in world.towers:
+		var o: String = world.towers[c].owner
+		built[o] = built.get(o, 0) + 1
+	var sig := "%s|%d|%d|%s|%s" % [won, world.wave, int(world.glow), str(names), str(built)]
+	if sig == _results_sig:
+		return
+	_results_sig = sig
+	_results_title.text = "VICTORY!" if won else "LIGHTS OUT…"
+	_results_sub.text = "Pip is safe and glowing bright!" if won else "The Snuffers dimmed Pip's light. Try again!"
+	for ch in _results_stats.get_children():
+		ch.queue_free()
+	for ch in _results_team.get_children():
+		ch.queue_free()
+	var waves: int = world.wave if won else maxi(world.wave - 1, 0)
+	_stat_tile(_results_stats, UI.tex("flame"), "%d" % waves, "waves held")
+	_stat_tile(_results_stats, UI.icon("pip"), "%d%%" % int(world.glow), "Pip's glow left")
+	_stat_tile(_results_stats, UI.icon("pebble_popper"), "%d" % world.towers.size(), "towers standing")
+	for n in names:
+		var t := UI.panel(_results_team, "Tile")
+		t.custom_minimum_size = Vector2(140, 0)
+		var v := VBoxContainer.new()
+		v.add_theme_constant_override("separation", 0)
+		t.add_child(v)
+		var pic := UI.picture(v, UI.icon(world.hero_choice.get(n, "bramble")), Vector2(56, 56))
+		pic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		var a := UI.label(v, n, 20, Color.WHITE, true, 6)
+		a.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		a.clip_text = true
+		var b := UI.label(v, "%d towers" % built.get(n, 0), 14, Color("#DCE2FF"), false, 4)
+		b.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+
 func show_message(text: String) -> void:
-	_message.text = text
+	_ribbon_label.text = text
+	_ribbon.visible = text != ""
+	_ribbon.reset_size()
 	_message_t = 3.5
 
 
@@ -294,6 +481,7 @@ func _process(delta: float) -> void:
 	if world == null:
 		return
 	_glow_bar.value = world.glow
+	_glow_pct.text = "%d%%" % int(world.glow)
 	if world.phase == "build":
 		world.phase_timer = maxf(0.0, world.phase_timer - delta) if not multiplayer.is_server() else world.phase_timer
 		_phase_label.text = "Build time · next wave in %ds" % ceili(world.phase_timer)
@@ -301,7 +489,8 @@ func _process(delta: float) -> void:
 		_phase_label.text = "Defend Pip!"
 	else:
 		_phase_label.text = "New match in %ds" % ceili(maxf(world.phase_timer, 0.0))
+	_results_timer.text = "A new match starts in %ds" % ceili(maxf(world.phase_timer, 0.0))
 	if _message_t > 0.0:
 		_message_t -= delta
 		if _message_t <= 0.0:
-			_message.text = ""
+			_ribbon.visible = false
