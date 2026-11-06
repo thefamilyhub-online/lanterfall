@@ -1283,6 +1283,7 @@ func _sound_watch() -> void:
 			"victory":
 				Sfx.duck(3.0)
 				Sfx.play("victory")
+				view.celebrate()
 			"defeat":
 				Sfx.duck(3.0)
 				Sfx.play("defeat")

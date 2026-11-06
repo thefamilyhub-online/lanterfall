@@ -32,6 +32,14 @@ var _pip: Node3D
 var _pip_light: OmniLight3D
 var _gate_bars: Node3D
 var _time := 0.0
+var _shake := 0.0
+var _flinch := 0.0
+var _flash_amt := 0.0
+var _cam_base := Vector3.ZERO
+var _last_glow := -1.0
+var _coin_mesh: CylinderMesh
+var _coin_mat: StandardMaterial3D
+var _flash: ColorRect
 
 
 func setup(w: Node) -> void:
@@ -123,6 +131,20 @@ func _build_environment() -> void:
 	add_child(camera)
 	camera.position = Vector3(0.6, 20.5, 13.2)
 	camera.look_at(Vector3(0.6, 0, 1.9))
+	_cam_base = camera.position
+	# a soft warm flash around the screen edges when Pip gets hit
+	var layer := CanvasLayer.new()
+	layer.layer = -1
+	add_child(layer)
+	_flash = ColorRect.new()
+	_flash.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var sh := Shader.new()
+	sh.code = "shader_type canvas_item;\nuniform float amount = 0.0;\nvoid fragment() {\n\tvec2 p = UV - 0.5;\n\tfloat v = smoothstep(0.25, 0.75, length(p * vec2(1.0, 1.3)));\n\tCOLOR = vec4(1.0, 0.45, 0.35, v * amount * 0.6);\n}"
+	var smat := ShaderMaterial.new()
+	smat.shader = sh
+	_flash.material = smat
+	layer.add_child(_flash)
 
 
 func _build_board() -> void:
@@ -434,8 +456,14 @@ func apply_snapshot(ids: PackedInt32Array, pos: PackedVector2Array, types: Packe
 		if not _snuffers.has(id):
 			_snuffers[id] = _make_snuffer(type)
 			_snuffers[id].node.position = Vector3(pos[i].x, 0, pos[i].y)
+			_snuffers[id].last_hp = 255
+			if D.SNUFFERS[type].get("boss", false):
+				shake(0.35)
 		var s: Dictionary = _snuffers[id]
 		s.target = Vector3(pos[i].x, 0, pos[i].y)
+		if hp[i] < int(s.last_hp):
+			_hit_squash(s.body)
+		s.last_hp = hp[i]
 		var r := hp[i] / 255.0
 		s.bg.visible = r < 0.999
 		s.fg.visible = r < 0.999
@@ -464,6 +492,7 @@ func apply_snapshot(ids: PackedInt32Array, pos: PackedVector2Array, types: Packe
 			Sfx.play_later("splat", 0.42)
 	for p in pops:
 		_confetti(Vector3(p.x, 0.4, p.y))
+		_coin_pop(Vector3(p.x, 0.5, p.y))
 		Sfx.play("snuffer_pop")
 	if pops.size() > 0:
 		Sfx.play("coin", -8.0)
@@ -525,6 +554,8 @@ func _play_shot(c: Vector2i, to: Vector2, kind: int) -> void:
 	var dest := Vector3(to.x, 0.35, to.y)
 	if c == Vector2i(-1, -1):
 		from = dest
+	elif kind <= 8:
+		_recoil(c)
 	match kind:
 		0:
 			var p := mesh_node(sphere(0.07), mat(Color("#FFC44D"), 3.0), from)
@@ -637,6 +668,64 @@ func _ripple(at: Vector3, radius: float, color: Color) -> void:
 	tw.tween_callback(r.queue_free)
 
 
+## Small camera shake (bosses, Pip getting hit).
+func shake(amount: float) -> void:
+	_shake = maxf(_shake, amount)
+
+
+## A spinning coin that pops out of a popped Snuffer.
+func _coin_pop(at: Vector3) -> void:
+	if _coin_mesh == null:
+		_coin_mesh = CylinderMesh.new()
+		_coin_mesh.top_radius = 0.11
+		_coin_mesh.bottom_radius = 0.11
+		_coin_mesh.height = 0.03
+		_coin_mesh.radial_segments = 14
+		_coin_mat = mat(Color("#FFC44D"), 1.2)
+	var c := mesh_node(_coin_mesh, _coin_mat, at)
+	c.rotation.x = PI / 2
+	add_child(c)
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(c, "position", at + Vector3(randf_range(-0.2, 0.2), 1.1, randf_range(-0.2, 0.2)), 0.55).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(c, "rotation:y", TAU * 2.0, 0.55)
+	tw.tween_property(c, "scale", Vector3.ONE * 0.2, 0.25).set_delay(0.4)
+	tw.chain().tween_callback(c.queue_free)
+
+
+## A quick squash so you can see who got hit.
+func _hit_squash(body: Node3D) -> void:
+	if body.has_meta("squashing"):
+		return
+	body.set_meta("squashing", true)
+	var base := body.scale
+	var tw := create_tween()
+	tw.tween_property(body, "scale", Vector3(base.x * 1.18, base.y * 0.8, base.z * 1.18), 0.05)
+	tw.tween_property(body, "scale", base, 0.12)
+	tw.tween_callback(body.remove_meta.bind("squashing"))
+
+
+## Towers kick back a little when they fire.
+func _recoil(c: Vector2i) -> void:
+	if not _tower_nodes.has(c):
+		return
+	var model := _tower_nodes[c].get_node_or_null("Model") as Node3D
+	if model == null or model.has_meta("kicking"):
+		return
+	model.set_meta("kicking", true)
+	var base := model.scale
+	var tw := create_tween()
+	tw.tween_property(model, "scale", Vector3(base.x * 1.07, base.y * 0.92, base.z * 1.07), 0.05)
+	tw.tween_property(model, "scale", base, 0.14).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_callback(model.remove_meta.bind("kicking"))
+
+
+## Big celebration around Pip.
+func celebrate() -> void:
+	for k in 8:
+		var a := k * TAU / 8.0
+		get_tree().create_timer(k * 0.12).timeout.connect(_confetti.bind(_pip.position + Vector3(cos(a) * 1.6, 0.6, sin(a) * 1.6)))
+
+
 func _confetti(at: Vector3) -> void:
 	var p := CPUParticles3D.new()
 	p.one_shot = true
@@ -714,8 +803,22 @@ func update_frame(delta: float) -> void:
 	if not _heroes.has(Net.my_name) and world.hero_choice.has(Net.my_name):
 		_heroes[Net.my_name] = _make_hero(Net.my_name, world.hero_choice[Net.my_name])
 	_reach_ring.position = Vector3(world.my_pos.x, 0.05, world.my_pos.y)
+	if _last_glow >= 0.0 and world.glow < _last_glow - 0.01 and world.phase != "build":
+		shake(0.25)
+		_flash_amt = 1.0
+		_flinch = 1.0
+	_last_glow = world.glow
+	if _flash_amt > 0.0:
+		_flash_amt = maxf(0.0, _flash_amt - delta * 2.0)
+		(_flash.material as ShaderMaterial).set_shader_parameter("amount", _flash_amt)
+	if _shake > 0.0:
+		_shake = maxf(0.0, _shake - delta * 1.2)
+		camera.position = _cam_base + Vector3(randf_range(-1, 1), randf_range(-0.5, 0.5), randf_range(-1, 1)) * _shake
+	elif camera.position != _cam_base and _cam_base != Vector3.ZERO:
+		camera.position = _cam_base
 	var g := clampf(world.glow / D.PIP_MAX, 0.05, 1.0)
-	_pip.scale = Vector3.ONE * (0.8 + 0.2 * g)
+	_flinch = maxf(0.0, _flinch - delta * 4.0)
+	_pip.scale = Vector3.ONE * (0.8 + 0.2 * g) * (1.0 - 0.25 * _flinch)
 	_pip.position.y = sin(_time * 1.6) * 0.05
 	_pip_light.light_energy = lerpf(_pip_light.light_energy, 0.6 + 2.6 * g, delta * 4.0)
 	_pip_light.omni_range = lerpf(_pip_light.omni_range, 3.0 + 4.5 * g, delta * 4.0)

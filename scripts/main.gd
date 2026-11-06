@@ -304,6 +304,7 @@ func _auto_place(spec: String) -> void:
 	if _auto.has("cam"):
 		var cv := String(_auto.cam).split(",")
 		w.view.camera.position = Vector3(float(cv[0]), float(cv[1]), float(cv[2]))
+		w.view.set("_cam_base", w.view.camera.position)
 		if cv.size() >= 5:
 			w.view.camera.look_at(Vector3(float(cv[3]), -0.6, float(cv[4])))
 		else:
