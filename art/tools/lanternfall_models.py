@@ -344,8 +344,9 @@ def build_lollipop_tree(x, m):
     cyl("Lp_Stick", 0.05, 0.05, 1.3, m["stick"], r, (0, 0, 0.65), segs=10)
     cyl("Lp_Disc", 0.45, 0.45, 0.12, m["candy_b"], r, (0, 0, 1.55), rot=(math.pi / 2, 0, 0), segs=32)
     for i, mat in enumerate(["candy_a", "candy_c", "candy_a", "candy_c"]):
-        torus(f"Lp_Swirl{i}", 0.38 - i * 0.09, 0.035, m[mat], r, (0, -0.06, 1.55), rot=(math.pi / 2, 0, i * 0.8), seg=28, ring=6)
-    sph("Lp_Center", 0.05, m["candy_a"], r, (0, -0.07, 1.55), segs=10)
+        torus(f"Lp_Swirl{i}", 0.38 - i * 0.09, 0.035, m[mat], r, (0, -0.07, 1.55), rot=(math.pi / 2, i * 0.8, 0), seg=28, ring=6)
+        torus(f"Lp_SwirlB{i}", 0.38 - i * 0.09, 0.035, m[mat], r, (0, 0.07, 1.55), rot=(math.pi / 2, i * 0.8, 0), seg=28, ring=6)
+    sph("Lp_Center", 0.05, m["candy_a"], r, (0, -0.08, 1.55), segs=10)
     cyl("Lp_Mound", 0.3, 0.18, 0.12, m["gum_pink"], r, (0, 0, 0.06), segs=16)
     return r
 
@@ -399,6 +400,8 @@ def render_sheet(path):
     for o in [o for o in s.objects if o.type in ("LIGHT", "CAMERA") or o.name == "Ground"]:
         bpy.data.objects.remove(o, do_unlink=True)
     for name, rt in ROOTS.items():
+        if name in ("scamper", "shellback", "flutter", "pip"):
+            rt.rotation_euler.z = math.pi
         if name in ("waygate", "licorice_gate"):
             rt.location.y = 1.4
         elif name == "lollipop_tree":
@@ -419,10 +422,10 @@ def render_sheet(path):
     fo.location = (0, -7, 6)
     fo.rotation_euler = (math.radians(45), 0, 0)
     cam = bpy.data.cameras.new("Camera")
-    cam.lens = 30
+    cam.lens = 24
     co = bpy.data.objects.new("Camera", cam)
     s.collection.objects.link(co)
-    co.location = (0, -8.5, 3.6)
+    co.location = (0, -10.5, 4.2)
     co.rotation_euler = (Vector((0, 0.4, 0.6)) - co.location).to_track_quat("-Z", "Y").to_euler()
     s.camera = co
     w = bpy.data.worlds.new("World")
@@ -458,7 +461,9 @@ def export_all(out_root):
     for fname, folder, fn in BUILDERS:
         rt = ROOTS[fname]
         saved = rt.location.copy()
+        saved_rot = rt.rotation_euler.copy()
         rt.location = (0, 0, 0)
+        rt.rotation_euler = (0, 0, 0)
         C.view_layer.update()
         dg = C.evaluated_depsgraph_get()
         exp_root = bpy.data.objects.new(fname + "_export", None)
@@ -548,5 +553,6 @@ def export_all(out_root):
         for o in export_objs:
             bpy.data.objects.remove(o, do_unlink=True)
         rt.location = saved
+        rt.rotation_euler = saved_rot
     s.render.engine = prev
     return done
