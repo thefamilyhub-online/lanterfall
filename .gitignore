@@ -8,4 +8,4 @@
 *.tmp
 
 # Textures Godot extracts from the .glb models on import
-assets/towers/*_albedo.png
+assets/towers/*_albedo.png*
