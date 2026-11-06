@@ -4,7 +4,8 @@ extends Node
 ## and broadcasts the result. Works as a dedicated server (`-- --server`) or as a
 ## "host & play" listen server where the host is also player 1.
 
-const GAME_VERSION := "0.1.0"
+const GAME_VERSION := "0.2.0"
+const D := preload("res://scripts/data.gd")
 const DEFAULT_PORT := 7777
 const MAX_PLAYERS := 8
 
@@ -14,6 +15,7 @@ signal players_updated
 signal player_logged_in(peer_id: int)
 
 var is_dedicated := false
+var map_id := "gumdrop_glade"   # which map this server plays
 var my_name := ""
 var my_hero := "bramble"
 var players: Dictionary = {}  # peer_id (int) -> display name (String)
@@ -23,6 +25,11 @@ var _pending := {}
 
 func _ready() -> void:
 	is_dedicated = "--server" in OS.get_cmdline_user_args()
+	if OS.get_environment("LANTERNFALL_MAP") != "":
+		map_id = OS.get_environment("LANTERNFALL_MAP")
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--map="):
+			map_id = a.substr(6)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
 	multiplayer.connection_failed.connect(_on_connection_failed)
@@ -32,6 +39,7 @@ func _ready() -> void:
 # ---------------------------------------------------------------- server side
 
 func start_server(port: int = DEFAULT_PORT) -> Error:
+	D.select_map(map_id)
 	var peer := ENetMultiplayerPeer.new()
 	var err := peer.create_server(port, MAX_PLAYERS)
 	if err != OK:
@@ -82,7 +90,7 @@ func request_login(player_name: String, pin: String, version: String) -> void:
 		return
 	var id := multiplayer.get_remote_sender_id()
 	var res := _server_login(id, player_name, pin, version)
-	login_result.rpc_id(id, res.ok, res.message)
+	login_result.rpc_id(id, res.ok, res.message, map_id)
 	if not res.ok:
 		await get_tree().create_timer(0.5).timeout
 		if multiplayer.multiplayer_peer is ENetMultiplayerPeer:
@@ -147,7 +155,9 @@ func _on_server_disconnected() -> void:
 
 
 @rpc("authority", "reliable")
-func login_result(ok: bool, message: String) -> void:
+func login_result(ok: bool, message: String, server_map := "gumdrop_glade") -> void:
+	map_id = server_map
+	D.select_map(map_id)
 	login_finished.emit(ok, message)
 
 

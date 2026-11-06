@@ -34,6 +34,10 @@ float noise(vec2 p) {
 const BOARD_SHADER := """
 shader_type spatial;
 uniform vec2 cells = vec2(24.0, 14.0);
+uniform vec3 col_a = vec3(0.55, 0.80, 0.48);
+uniform vec3 col_b = vec3(0.48, 0.74, 0.43);
+uniform vec3 speck_a = vec3(1.0, 0.97, 0.98);
+uniform vec3 speck_b = vec3(1.0, 0.72, 0.86);
 varying vec3 wp;
 %s
 void vertex() { wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
@@ -42,7 +46,7 @@ void fragment() {
 	vec2 cell = floor(c);
 	vec2 f = fract(c);
 	float chk = mod(cell.x + cell.y, 2.0);
-	vec3 col = mix(vec3(0.55, 0.80, 0.48), vec3(0.48, 0.74, 0.43), chk);
+	vec3 col = mix(col_a, col_b, chk);
 	col *= 0.95 + 0.09 * hash(cell);
 	float n = noise(wp.xz * 1.6) * 0.6 + noise(wp.xz * 4.5) * 0.4;
 	col = mix(col, col * vec3(0.88, 1.04, 0.82), smoothstep(0.5, 0.8, n));
@@ -55,7 +59,7 @@ void fragment() {
 	vec2 g = wp.xz * 7.0; vec2 gi = floor(g);
 	if (hash(gi) > 0.978) {
 		float d = length(fract(g) - 0.5);
-		vec3 fc = hash(gi + 3.1) > 0.5 ? vec3(1.0, 0.97, 0.98) : vec3(1.0, 0.72, 0.86);
+		vec3 fc = hash(gi + 3.1) > 0.5 ? speck_a : speck_b;
 		col = mix(col, fc, 1.0 - smoothstep(0.1, 0.17, d));
 	}
 	ALBEDO = pow(col, vec3(2.2));
@@ -65,13 +69,16 @@ void fragment() {
 
 const MEADOW_SHADER := """
 shader_type spatial;
+uniform vec3 ground_a = vec3(0.36, 0.63, 0.37);
+uniform vec3 ground_b = vec3(0.45, 0.72, 0.41);
+uniform vec3 patch_col = vec3(0.62, 0.80, 0.46);
 varying vec3 wp;
 %s
 void vertex() { wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
 void fragment() {
 	float n = noise(wp.xz * 0.35) * 0.6 + noise(wp.xz * 1.3) * 0.4;
-	vec3 col = mix(vec3(0.36, 0.63, 0.37), vec3(0.45, 0.72, 0.41), n);
-	col = mix(col, vec3(0.62, 0.80, 0.46), smoothstep(0.62, 0.9, noise(wp.xz * 0.2 + 4.0)) * 0.6);
+	vec3 col = mix(ground_a, ground_b, n);
+	col = mix(col, patch_col, smoothstep(0.62, 0.9, noise(wp.xz * 0.2 + 4.0)) * 0.6);
 	vec2 g = wp.xz * 5.0; vec2 gi = floor(g);
 	float h = hash(gi);
 	if (h > 0.975) {

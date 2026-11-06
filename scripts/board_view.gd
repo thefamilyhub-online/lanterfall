@@ -5,6 +5,7 @@ extends Node3D
 
 const D := preload("res://scripts/data.gd")
 const GladeDecor := preload("res://scripts/glade_decor.gd")
+const ForestDecor := preload("res://scripts/tanglewood_decor.gd")
 const Shapes := preload("res://scripts/shapes.gd")
 
 const SNUFFER_COLORS := {
@@ -12,7 +13,7 @@ const SNUFFER_COLORS := {
 	"flutter": Color("#E06FB0"), "big_shellback": Color("#4E6A93"),
 }
 const HERO_COLORS := {"bramble": Color("#4FA44F"), "glint": Color("#F5B83D")}
-const PATH_COLORS := [Color("#F5B83D"), Color("#F27BAA")]
+const PATH_COLORS := [Color("#F5B83D"), Color("#F27BAA"), Color("#7FD3FF")]
 
 var world: Node
 var camera: Camera3D
@@ -30,7 +31,7 @@ var _reach_ring: MeshInstance3D
 var _glow_ring: MeshInstance3D
 var _pip: Node3D
 var _pip_light: OmniLight3D
-var _gate_bars: Node3D
+var _gate_bars: Array[Node3D] = []
 var _time := 0.0
 var _shake := 0.0
 var _flinch := 0.0
@@ -123,6 +124,14 @@ func _build_environment() -> void:
 	sun.rotation_degrees = Vector3(-52, -28, 0)
 	sun.light_energy = 1.15
 	sun.light_color = Color("#FFF1DD")
+	if D.MAP.theme == "forest":
+		# dusk in the woods: warm low sun, cooler ambient, lanterns do the rest
+		sun.rotation_degrees = Vector3(-38, -40, 0)
+		sun.light_energy = 0.85
+		sun.light_color = Color("#FFC890")
+		e.ambient_light_color = Color("#8FA0E0")
+		e.ambient_light_energy = 0.5
+		e.background_color = Color("#2E4A33")
 	sun.shadow_enabled = true
 	add_child(sun)
 
@@ -148,14 +157,14 @@ func _build_environment() -> void:
 
 
 func _build_board() -> void:
-	var decor := GladeDecor.new()
-	decor.name = "GladeDecor"
+	var decor: Node3D = ForestDecor.new() if D.MAP.theme == "forest" else GladeDecor.new()
+	decor.name = "MapDecor"
 	add_child(decor)
 	decor.build(self)
 	var colors := [Color("#F27BAA"), Color("#FFD34D"), Color("#7FC8F0"), Color("#B48CF2")]
 	var i := 0
 	for r in D.MAP.rocks:
-		var node := model("res://assets/props/gumdrop.glb")
+		var node: Node3D = Shapes.stump() if D.MAP.theme == "forest" else model("res://assets/props/gumdrop.glb")
 		if node == null:
 			node = mesh_node(sphere(0.42), mat(colors[i % colors.size()]))
 			node.scale = Vector3(1, 0.8, 1)
@@ -192,21 +201,24 @@ func _build_landmarks() -> void:
 		holder.rotation.y = PI / 2
 		holder.add_child(gate)
 		add_child(holder)
-		if k == D.MAP.gate_entrance:
+		if k in D.MAP.gates:
 			var lg := model("res://assets/props/licorice_gate.glb")
 			var gh := Node3D.new()
 			gh.position = world.cell_to_world(e) + Vector3(0.25, 0, 0)
 			gh.rotation.y = PI / 2
+			var bars: Node3D = null
 			if lg:
 				gh.add_child(lg)
-				_gate_bars = lg.find_child("Bars*", true, false) as Node3D
-			if _gate_bars == null:
-				_gate_bars = Node3D.new()
+				bars = lg.find_child("Bars*", true, false) as Node3D
+			if bars == null:
+				bars = Node3D.new()
+				var bar_color := Color("#2B1B2E") if D.MAP.theme == "candy" else Color("#3E6B2E")
 				for j in 4:
 					var bar := BoxMesh.new()
 					bar.size = Vector3(0.09, 0.9, 0.09)
-					_gate_bars.add_child(mesh_node(bar, mat(Color("#2B1B2E")), Vector3(-0.33 + j * 0.22, 0.45, 0)))
-				gh.add_child(_gate_bars)
+					bars.add_child(mesh_node(bar, mat(bar_color), Vector3(-0.33 + j * 0.22, 0.45, 0)))
+				gh.add_child(bars)
+			_gate_bars.append(bars)
 			add_child(gh)
 	_pip = Node3D.new()
 	_pip.position = world.cell_to_world(D.MAP.pip)
@@ -248,21 +260,24 @@ func refresh_paths() -> void:
 	_path_dots.clear()
 	var dot := sphere(0.06)
 	for k in D.MAP.entrances.size():
-		if k == D.MAP.gate_entrance and world.gate_closed_waves > 0:
+		if k in D.MAP.gates and world.gate_closed_waves > 0:
 			continue
 		var path: Array[Vector2i] = world.path_from(D.MAP.entrances[k])
 		for i in range(1, path.size() - 1):
-			var n := mesh_node(dot, mat(PATH_COLORS[k], 1.0), world.cell_to_world(path[i]) + Vector3(0.12 * (k * 2 - 1), 0.09, 0))
+			var n := mesh_node(dot, mat(PATH_COLORS[k], 1.0), world.cell_to_world(path[i]) + Vector3(0.12 * (k - (D.MAP.entrances.size() - 1) / 2.0), 0.09, 0))
 			add_child(n)
 			_path_dots.append(n)
 
 
 func refresh_gate() -> void:
-	if _gate_bars:
-		var closed: bool = world.gate_closed_waves > 0
-		if _gate_bars.visible != closed:
-			_gate_bars.visible = closed
-			refresh_paths()
+	var closed: bool = world.gate_closed_waves > 0
+	var changed := false
+	for bars in _gate_bars:
+		if bars.visible != closed:
+			bars.visible = closed
+			changed = true
+	if changed:
+		refresh_paths()
 
 
 # ================================================================ towers

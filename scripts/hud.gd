@@ -71,7 +71,7 @@ func _build_top_left(root: Control) -> void:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 2)
 	row.add_child(col)
-	UI.label(col, "GUMDROP GLADE", 15, UI.LILAC, true, 4)
+	UI.label(col, String(D.MAP.name).to_upper(), 15, UI.LILAC, true, 4)
 	_wave_label = UI.label(col, "", 30, UI.GOLD, true, 8)
 	_phase_label = UI.label(col, "", 16, UI.CREAM)
 	var gr := HBoxContainer.new()
