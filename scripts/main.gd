@@ -7,7 +7,7 @@ extends Control
 ##      [--upgrade=X,Y|X,Y] [--ready=1] [--quit-after=SECONDS]
 ##   Server only: -- --server --speed=8   (runs the simulation faster, for tests)
 ##   Screenshots (needs a display): --shot=/abs/path.png --shot-after=SECONDS
-##      [--select=X,Y] [--preview-results=1]
+##      [--select=X,Y] [--preview-results=1] [--cam=X,Y,Z[,lookZ]]
 
 const SETTINGS_PATH := "user://settings.cfg"
 const World := preload("res://scripts/world.gd")
@@ -292,6 +292,10 @@ func _auto_place(spec: String) -> void:
 		var sxy := String(_auto.select).split(",")
 		w.selected_cell = Vector2i(int(sxy[0]), int(sxy[1]))
 		w.hud.refresh()
+	if _auto.has("cam"):
+		var cv := String(_auto.cam).split(",")
+		w.view.camera.position = Vector3(float(cv[0]), float(cv[1]), float(cv[2]))
+		w.view.camera.look_at(Vector3(0, -0.6, float(cv[3]) if cv.size() > 3 else 0.0))
 	if _auto.has("preview-results"):
 		w.hud.preview_results = true
 		w.hud.refresh()

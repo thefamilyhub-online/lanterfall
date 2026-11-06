@@ -21,7 +21,9 @@ Built with **Godot 4.7** (GDScript) for Windows and macOS, with a dedicated serv
 - **Teamwork:** towers owned by *different* players combo when they touch (Slushy, Ice Pebbles, Hedge Watch). Gift coins to teammates (up to half your coins per wave).
 - **Ready up:** when everyone's ready the wave starts early and everyone gets a coin bonus.
 - **The licorice gate:** close the lower entrance for 2 waves (75 coins).
-- **Gumdrop Glade:** two entrances, syrup pools that slow Snuffers, gumdrop rocks.
+- **Gumdrop Glade:** two entrances, syrup pools that slow Snuffers, gumdrop rocks. The board is a frosted cake in a candy meadow, with a chocolate river, cookie stepping stones, cupcakes and lantern posts.
+
+![Gumdrop Glade overview](art/ui/glade_overview.png)
 
 ### Controls
 
@@ -71,6 +73,7 @@ Then open **UDP 7777** in the VPS firewall. Players join with the server's addre
 | `scripts/data.gd` | All the numbers: towers, Snuffers, waves, heroes, combos, the map |
 | `scripts/world.gd` | The match: waves, combat, coins, heroes, combos, gate (server-side) |
 | `scripts/board_view.gd` | Everything you see on the board |
+| `scripts/glade_decor.gd` | Gumdrop Glade scenery: grass tiles, cake edge, syrup, meadow, river, props |
 | `scripts/hud.gd` | In-game HUD and results screen |
 | `scripts/ui_theme.gd` | The Lanternfall look: buttons, panels, ribbon, fonts |
 | `scripts/card_button.gd` | Lantern-glow cards for tower and hero picks |
