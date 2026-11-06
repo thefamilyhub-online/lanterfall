@@ -157,8 +157,8 @@ const SNUFFERS := {
 	# ---- bosses
 	"big_shellback": {name = "Big Shellback", hp = 900.0, armor = 4.0, speed = 0.8, reward = 150, damage = 40.0, air = false, size = 2.2,
 		sheds = [0.66, 0.33], shed_count = 3, shed_type = "shellback", boss = true},
-	"big_splitblob": {name = "Big Splitblob", hp = 700.0, armor = 1.0, speed = 0.9, reward = 120, damage = 35.0, air = false, size = 2.1,
-		splits = "splitblob", split_count = 4, boss = true},
+	"big_splitblob": {name = "Big Splitblob", hp = 560.0, armor = 1.0, speed = 0.9, reward = 120, damage = 30.0, air = false, size = 2.1,
+		splits = "splitblob", split_count = 3, boss = true},
 	"big_bubbleguard": {name = "Big Bubbleguard", hp = 1100.0, armor = 3.0, speed = 0.8, reward = 160, damage = 40.0, air = false, size = 2.2,
 		shield_every = 2.5, shield_range = 2.4, boss = true},
 	"vine_puffer": {name = "Vine Puffer", hp = 3400.0, armor = 4.0, speed = 0.7, reward = 400, damage = 100.0, air = false, size = 2.8,
