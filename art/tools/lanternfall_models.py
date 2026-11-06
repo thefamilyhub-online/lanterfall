@@ -452,13 +452,35 @@ def _metal_export(mat):
     return m
 
 
-def export_all(out_root):
+def _flat_copy(mat):
+    """A plain-colour stand-in for a textured material on parts kept separate."""
+    name = mat.name + "_flat"
+    m = bpy.data.materials.get(name)
+    if m:
+        return m
+    col = (0.8, 0.8, 0.8, 1)
+    for n in mat.node_tree.nodes:
+        if n.type == "VALTORGB":
+            col = tuple(n.color_ramp.elements[0].color)
+        elif n.type == "TEX_BRICK":
+            col = tuple(n.inputs["Color1"].default_value)
+    m = bpy.data.materials.new(name)
+    m.use_nodes = True
+    b = m.node_tree.nodes["Principled BSDF"]
+    b.inputs["Base Color"].default_value = col
+    b.inputs["Roughness"].default_value = 0.45
+    return m
+
+
+def export_all(out_root, only=None):
     s = C.scene
     prev = s.render.engine
     s.render.engine = "CYCLES"
     s.cycles.samples = 8
     done = {}
     for fname, folder, fn in BUILDERS:
+        if only and fname not in only:
+            continue
         rt = ROOTS[fname]
         saved = rt.location.copy()
         saved_rot = rt.rotation_euler.copy()
@@ -542,6 +564,8 @@ def export_all(out_root):
                     metal = _metal_export(slot.material)
                     if metal:
                         d.material_slots[i].material = metal
+                    elif slot.material.get("textured", 0):
+                        d.material_slots[i].material = _flat_copy(slot.material)
                 export_objs.append(d)
         bpy.ops.object.select_all(action="DESELECT")
         for o in export_objs:
