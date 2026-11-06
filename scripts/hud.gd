@@ -157,19 +157,22 @@ func _build_bottom(root: Control) -> void:
 	left.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	left.add_theme_constant_override("separation", 8)
 	bottom.add_child(left)
-	var help := UI.label(left, "WASD walk · 1–4 pick · click build/select · Q ability · R ready · U upgrade · X sell", 14, UI.LILAC, false, 4)
+	var help := UI.label(left, "WASD walk · 1–4 pick a family (press again for the next tower) · click build/select · Q ability · R ready · U upgrade · X sell", 14, UI.LILAC, false, 4)
 	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	var cards := HBoxContainer.new()
-	cards.add_theme_constant_override("separation", 14)
+	cards.add_theme_constant_override("separation", 18)
 	left.add_child(cards)
-	for i in D.TOWER_ORDER.size():
-		var t: String = D.TOWER_ORDER[i]
-		var c := CardButton.new()
-		cards.add_child(c)
-		c.setup(UI.icon(t), D.TOWERS[t].name, Vector2(108, 132), str(i + 1))
-		c.tooltip_text = D.TOWERS[t].blurb
-		c.pressed.connect(world.select_type.bind(t))
-		_tower_cards[t] = c
+	for f in D.FAMILIES.size():
+		var group := HBoxContainer.new()
+		group.add_theme_constant_override("separation", 6)
+		cards.add_child(group)
+		for t in D.towers_in(D.FAMILIES[f]):
+			var c := CardButton.new()
+			group.add_child(c)
+			c.setup(UI.icon(t), D.TOWERS[t].name, Vector2(74, 96), str(f + 1))
+			c.tooltip_text = "%s (%s)\n%s" % [D.TOWERS[t].name, D.FAMILY_NAMES[D.FAMILIES[f]], D.TOWERS[t].blurb]
+			c.pressed.connect(world.select_type.bind(t))
+			_tower_cards[t] = c
 
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -181,7 +184,7 @@ func _build_bottom(root: Control) -> void:
 	right.size_flags_vertical = Control.SIZE_SHRINK_END
 	right.add_theme_constant_override("separation", 10)
 	bottom.add_child(right)
-	_ability_btn = UI.button(right, "", "PurpleButton", world.use_ability, Vector2(200, 76))
+	_ability_btn = UI.button(right, "", "PurpleButton", world.use_ability, Vector2(176, 76))
 	_ability_btn.alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_ability_icon = TextureRect.new()
 	_ability_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -190,9 +193,9 @@ func _build_bottom(root: Control) -> void:
 	_ability_icon.size = Vector2(52, 56)
 	_ability_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_ability_btn.add_child(_ability_icon)
-	_gate_btn = UI.button(right, "", "Button", world.close_gate, Vector2(160, 76))
-	_ready_btn = UI.button(right, "", "GreenButton", world.toggle_ready, Vector2(210, 76))
-	_ready_btn.add_theme_font_size_override("font_size", 22)
+	_gate_btn = UI.button(right, "", "Button", world.close_gate, Vector2(132, 76))
+	_ready_btn = UI.button(right, "", "GreenButton", world.toggle_ready, Vector2(172, 76))
+	_ready_btn.add_theme_font_size_override("font_size", 20)
 
 
 # ---------------------------------------------------------------- selected tower
@@ -324,9 +327,14 @@ func refresh() -> void:
 	var w: int = world.wave
 	if world.phase == "build":
 		var next: int = w + 1
-		_wave_label.text = "BOSS NEXT!" if next == D.BOSS_WAVE else "WAVE %d / %d" % [next, D.LAST_WAVE]
+		if next == D.BOSS_WAVE:
+			_wave_label.text = "FINAL BOSS NEXT!"
+		elif D.MINI_BOSS_WAVES.has(next):
+			_wave_label.text = "WAVE %d · MINI-BOSS!" % next
+		else:
+			_wave_label.text = "WAVE %d / %d" % [next, D.BOSS_WAVE]
 	else:
-		_wave_label.text = "BIG SHELLBACK!" if w == D.BOSS_WAVE else "WAVE %d / %d" % [w, D.LAST_WAVE]
+		_wave_label.text = "SUGAR SNUFFER!" if w == D.BOSS_WAVE else "WAVE %d / %d" % [w, D.BOSS_WAVE]
 	for t in _tower_cards:
 		var c = _tower_cards[t]
 		var cost: int = world.build_cost(me, t)
@@ -421,13 +429,29 @@ func _refresh_panel() -> void:
 		UI.label(_panel_flames, "  Tier %d" % t.tier, 15, Color("#FFE3A3"), true, 4)
 	_panel_owner.text = "Built by %s" % t.owner
 	var lines := [d.blurb]
-	if d.kind != "wall":
-		var i: int = t.tier - 1
-		lines.append("Damage %s · Range %.1f · %.1f shots/s" % [str(d.damage[i]), world.tower_range(c), d.rate[i]])
+	var i: int = t.tier - 1
+	match d.kind:
+		"wall":
+			pass
+		"beacon":
+			lines.append("Boosts towers within %.1f tiles: +%d%% range" % [d.range[i], int(d.boost[i] * 100)])
+		"mirror":
+			lines.append("Touching towers deal +%d%% damage" % int(d.boost[i] * 100))
+		"bounce":
+			lines.append("Springs Snuffers back %d tiles · %.1f bounces/s" % [d.push[i], d.rate[i]])
+		_:
+			var extra := ""
+			if d.has("pierce"):
+				extra = " · pierces %d" % d.pierce[i]
+			elif d.has("targets"):
+				extra = " · %d targets" % d.targets[i]
+			lines.append("Damage %s · Range %.1f · %.1f/s%s" % [str(snappedf(d.damage[i] * world.damage_mult(c), 0.1)), world.tower_range(c), d.rate[i], extra])
 	for combo in D.COMBOS:
 		if combo.id in world.combos.get(c, []) and (combo.a == t.type or combo.b == t.type):
 			lines.append("Combo %s: %s" % [combo.name, combo.text])
-	if world.in_glow(c) and d.kind != "wall":
+	if world.beacon_boost(c) > 0.0 and d.has("damage"):
+		lines.append("Beacon boost: +%d%% range" % int(world.beacon_boost(c) * 100))
+	if world.in_glow(c) and d.has("damage"):
 		lines.append("In Pip's glow: fires 10% faster")
 	if t.oc > 0.0:
 		lines.append("Overcharged!")

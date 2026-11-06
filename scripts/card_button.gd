@@ -43,7 +43,7 @@ func setup(picture: Texture2D, title: String, size := Vector2(108, 132), key := 
 	_frame.patch_margin_bottom = 50
 	_add(_frame)
 
-	var strip := 34.0 if subtitle == "" else 50.0
+	var strip := (34.0 if size.x >= 90 else 26.0) if subtitle == "" else 50.0
 	_picture = TextureRect.new()
 	_picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_picture.texture = picture
@@ -52,7 +52,11 @@ func setup(picture: Texture2D, title: String, size := Vector2(108, 132), key := 
 	_picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_add(_picture)
 
-	_title = _text(title, 15 if size.x < 140 else 22, Color.WHITE, true)
+	_title = _text(title, 10 if size.x < 90 else (15 if size.x < 140 else 22), Color.WHITE, true)
+	if size.x < 90:
+		_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_title.clip_text = false
+		_title.add_theme_constant_override("line_spacing", -4)
 	_title.position = Vector2(9, size.y - 12 - strip)
 	_title.size = Vector2(size.x - 18, 30 if subtitle != "" else strip)
 	if subtitle != "":

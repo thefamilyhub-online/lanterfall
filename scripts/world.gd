@@ -26,7 +26,7 @@ var combo_links: Array = []       # [Vector2i, Vector2i, combo name]
 var glow := D.PIP_MAX
 var phase := "build"              # build, wave, victory, defeat
 var wave := 0
-var phase_timer := D.FIRST_BUILD_TIME
+var phase_timer := _first_build()
 var ready_names: Dictionary = {}  # name -> true
 var gate_closed_waves := 0
 var gate_cooldown := 0
@@ -138,9 +138,43 @@ func tower_range(c: Vector2i) -> float:
 	if not d.has("range"):
 		return 0.0
 	var r: float = d.range[t.tier - 1]
-	if "hedge_watch" in combos.get(c, []):
+	if d.kind in ["wall", "beacon", "mirror", "bounce"]:
+		return r
+	var tc: Array = combos.get(c, [])
+	if "hedge_watch" in tc:
 		r += D.HEDGE_WATCH_RANGE
+	if "spotlight" in tc:
+		r += D.SPOTLIGHT_RANGE
+	r *= 1.0 + beacon_boost(c)
 	return r
+
+
+## Range bonus from the strongest Beacon Post that reaches this tower.
+func beacon_boost(c: Vector2i) -> float:
+	var best := 0.0
+	var cw := _cell_center2(c)
+	for b in towers:
+		var bt: Dictionary = towers[b]
+		if b == c or bt.type != "beacon_post":
+			continue
+		var bd: Dictionary = D.TOWERS.beacon_post
+		if _cell_center2(b).distance_to(cw) <= bd.range[bt.tier - 1] + 0.01:
+			best = maxf(best, bd.boost[bt.tier - 1])
+	return best
+
+
+## Damage bonus from touching Mirror Stones (and the Prism Path combo).
+func damage_mult(c: Vector2i) -> float:
+	var m := 1.0
+	var best := 0.0
+	for n in NEIGHBORS:
+		var nc: Vector2i = c + n
+		if towers.has(nc) and towers[nc].type == "mirror_stone":
+			best = maxf(best, D.TOWERS.mirror_stone.boost[towers[nc].tier - 1])
+	m *= 1.0 + best
+	if "prism_path" in combos.get(c, []):
+		m *= D.PRISM_BONUS
+	return m
 
 
 func build_cost(player_name: String, type: String) -> int:
@@ -227,24 +261,43 @@ func recompute_combos() -> void:
 
 func _game_state() -> Dictionary:
 	var oc := []
+	var jam := []
 	for c in towers:
 		if towers[c].oc > 0.0:
 			oc.append(c)
+		if towers[c].get("jam", 0.0) > 0.0:
+			jam.append(c)
 	return {
 		phase = phase, wave = wave, timer = phase_timer, glow = glow,
 		ready = ready_names.keys(), gate_closed = gate_closed_waves, gate_cd = gate_cooldown,
 		coins = coins, heroes = hero_choice, hero_cd = hero_cd, rush = rush, gift = gift_allow,
-		overcharged = oc,
+		overcharged = oc, jammed = jam,
 	}
 
 
 # ================================================================ server: players
 
+## First build phase length; tests can pass --first-build=SECONDS.
+static func _first_build() -> float:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--first-build="):
+			return float(a.substr(14))
+	return D.FIRST_BUILD_TIME
+
+
+## Starting coins; tests can pass --coins=N to the server.
+func _start_coins() -> int:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--coins="):
+			return int(a.substr(8))
+	return D.START_COINS
+
+
 func _join_as(player_name: String, hero: String) -> void:
 	if player_name == "":
 		return
 	if not coins.has(player_name):
-		coins[player_name] = D.START_COINS
+		coins[player_name] = _start_coins()
 		rush[player_name] = 0
 		hero_cd[player_name] = 0.0
 		gift_allow[player_name] = D.START_COINS >> 1
@@ -365,6 +418,10 @@ func _start_wave(early: bool) -> void:
 		bonus = int(phase_timer) * D.EARLY_CALL_PER_SECOND
 		for n in coins:
 			coins[n] += bonus
+	if wave == 0:
+		for a in OS.get_cmdline_user_args():
+			if a.begins_with("--start-wave="):
+				wave = int(a.substr(13)) - 1   # test helper
 	wave += 1
 	phase = "wave"
 	ready_names.clear()
@@ -382,7 +439,7 @@ func _start_wave(early: bool) -> void:
 	for i in list.size():
 		_spawn_queue.append([list[i], entrances[i % entrances.size()]])
 	_spawn_timer = 0.5
-	var label := "The Big Shellback is coming!" if wave == D.BOSS_WAVE else "Wave %d of %d!" % [wave, D.LAST_WAVE]
+	var label := "The Sugar Snuffer is coming!" if wave == D.BOSS_WAVE else "Wave %d of %d!" % [wave, D.BOSS_WAVE]
 	if bonus > 0:
 		label += "  Early call: +%d coins each" % bonus
 	_announce(label)
@@ -421,12 +478,12 @@ func _reset_match(text: String) -> void:
 	glow = D.PIP_MAX
 	wave = 0
 	phase = "build"
-	phase_timer = D.FIRST_BUILD_TIME
+	phase_timer = _first_build()
 	ready_names.clear()
 	gate_closed_waves = 0
 	gate_cooldown = 0
 	for n in coins.keys():
-		coins[n] = D.START_COINS
+		coins[n] = _start_coins()
 		rush[n] = 0
 		hero_cd[n] = 0.0
 		gift_allow[n] = D.START_COINS >> 1
@@ -444,6 +501,9 @@ func _spawn(delta: float) -> void:
 	var item: Array = _spawn_queue.pop_front()
 	var e: Vector2i = D.MAP.entrances[item[1]]
 	_add_snuffer(item[0], _cell_center2(e), e)
+	var sd: Dictionary = D.SNUFFERS[item[0]]
+	if sd.get("boss", false) and not sd.get("final", false):
+		_announce("A %s is coming!" % sd.name)
 
 
 func _add_snuffer(type: String, pos: Vector2, from_cell: Vector2i) -> void:
@@ -453,10 +513,12 @@ func _add_snuffer(type: String, pos: Vector2, from_cell: Vector2i) -> void:
 	if not d.air:
 		path = path_from(from_cell)
 	_snuffers[_next_id] = {
-		type = type, hp = hp, max_hp = hp, armor = d.armor, speed = d.speed, air = d.air,
+		id = _next_id, type = type, hp = hp, max_hp = hp, armor = d.armor, speed = d.speed, air = d.air,
 		pos = pos, path = path, idx = 0,
 		slow = 0.0, slow_t = 0.0, freeze_t = 0.0, dist = 0.0, last_owner = "",
 		sheds_done = 0, dead = false,
+		sneaky = d.get("sneaky", false), revealed = false, reveal_t = 0.0,
+		shield = false, shield_cd = randf_range(0.5, 1.5), honey_t = 0.0, spring_t = 0.0,
 	}
 	_next_id += 1
 
@@ -464,10 +526,14 @@ func _add_snuffer(type: String, pos: Vector2, from_cell: Vector2i) -> void:
 func _move_snuffers(delta: float) -> void:
 	var pip := _cell_center2(D.MAP.pip)
 	var leaked: Array = []
+	_snuffer_powers(delta)
 	for id in _snuffers:
 		var s: Dictionary = _snuffers[id]
 		s.slow_t = maxf(0.0, s.slow_t - delta)
 		s.freeze_t = maxf(0.0, s.freeze_t - delta)
+		s.honey_t = maxf(0.0, s.honey_t - delta)
+		s.spring_t = maxf(0.0, s.spring_t - delta)
+		s.reveal_t = maxf(0.0, s.reveal_t - delta)
 		if s.slow_t <= 0.0:
 			s.slow = 0.0
 		var spd: float = s.speed * (1.0 - s.slow)
@@ -514,6 +580,49 @@ func _move_snuffers(delta: float) -> void:
 		print("[server] DEFEAT on wave %d" % wave)
 
 
+## Menders heal, Bubbleguards hand out shields, Jammers jam towers.
+func _snuffer_powers(delta: float) -> void:
+	var list: Array = _snuffers.values()
+	for s in list:
+		var d: Dictionary = D.SNUFFERS[s.type]
+		if d.get("heal", 0.0) > 0.0:
+			for o in list:
+				if o != s and o.honey_t <= 0.0 and o.hp < o.max_hp and o.pos.distance_to(s.pos) <= d.heal_range:
+					o.hp = minf(o.max_hp, o.hp + o.max_hp * d.heal * delta)
+		if d.has("shield_every"):
+			s.shield_cd -= delta
+			if s.shield_cd <= 0.0:
+				s.shield_cd = d.shield_every
+				var gave := false
+				for o in list:
+					if o != s and not o.shield and o.pos.distance_to(s.pos) <= d.shield_range:
+						o.shield = true
+						gave = true
+				if gave:
+					_shots.append([Vector2i(-1, -1), s.pos, 11])
+		if d.has("jam_range"):
+			for c in towers:
+				if towers[c].type == "hedge_block":
+					continue
+				if _cell_center2(c).distance_to(s.pos) <= d.jam_range:
+					if towers[c].get("jam", 0.0) <= 0.0:
+						_shots.append([c, s.pos, 12])
+					towers[c].jam = d.jam_time
+	# who can be seen: Pip's glow and Beacon Posts reveal Shades
+	var gr := glow_radius()
+	var pip := _cell_center2(D.MAP.pip)
+	for s in list:
+		if not s.sneaky:
+			continue
+		var seen: bool = s.reveal_t > 0.0 or s.pos.distance_to(pip) <= gr
+		if not seen:
+			for c in towers:
+				if towers[c].type == "beacon_post" and _cell_center2(c).distance_to(s.pos) <= D.TOWERS.beacon_post.range[towers[c].tier - 1]:
+					seen = true
+					break
+		s.revealed = seen
+
+
 func _rate_mult(c: Vector2i) -> float:
 	var m := 1.0
 	if in_glow(c):
@@ -532,7 +641,10 @@ func _towers_fire(delta: float) -> void:
 	for c in towers:
 		var t: Dictionary = towers[c]
 		var d: Dictionary = D.TOWERS[t.type]
-		if d.kind == "wall":
+		if d.kind in ["wall", "beacon", "mirror"]:
+			continue
+		if t.get("jam", 0.0) > 0.0:
+			t.jam = maxf(0.0, t.jam - delta)
 			continue
 		var i: int = t.tier - 1
 		t.cd -= delta * d.rate[i] * _rate_mult(c)
@@ -540,24 +652,28 @@ func _towers_fire(delta: float) -> void:
 			continue
 		var origin := _cell_center2(c)
 		var rng := tower_range(c)
+		var sees_sneaky: bool = d.kind == "swarm"
 		var target = null
 		var best := -1.0
 		for id in _snuffers:
 			var s: Dictionary = _snuffers[id]
-			if s.dead or (s.air and not d.air):
+			if s.dead or (s.air and not d.air) or (s.sneaky and not s.revealed and not sees_sneaky):
 				continue
 			if s.pos.distance_to(origin) <= rng and s.dist > best:
 				best = s.dist
 				target = s
 		if target == null:
 			t.cd = 0.0
+			if d.kind == "beam":
+				t.heat = 0.0
 			continue
 		t.cd += 1.0
 		var tc: Array = combos.get(c, [])
+		var dmg: float = d.damage[i] * damage_mult(c) if d.has("damage") else 0.0
 		match d.kind:
 			"single":
 				_shots.append([c, target.pos, 0])
-				_hit(target, d.damage[i], t.owner)
+				_hit(target, dmg, t.owner)
 				if "ice_pebbles" in tc:
 					_chill(target, D.ICE_PEBBLE_SLOW, D.ICE_PEBBLE_TIME)
 			"splash":
@@ -565,15 +681,87 @@ func _towers_fire(delta: float) -> void:
 				_shots.append([c, center, 1])
 				for s in _snuffers.values():
 					if not s.dead and not s.air and s.pos.distance_to(center) <= d.splash[i]:
-						_hit(s, d.damage[i], t.owner)
+						_hit(s, dmg, t.owner)
 						if "slushy" in tc:
 							s.freeze_t = maxf(s.freeze_t, D.SLUSHY_FREEZE)
 			"pulse":
 				_shots.append([c, origin, 2])
 				for s in _snuffers.values():
 					if not s.dead and s.pos.distance_to(origin) <= rng:
-						_hit(s, d.damage[i], t.owner)
+						_hit(s, dmg, t.owner)
 						_chill(s, d.slow[i], d.slow_time)
+			"pierce":
+				var dir: Vector2 = (target.pos - origin).normalized()
+				var end_pt: Vector2 = origin + dir * rng
+				var hits: Array = []
+				for s in _snuffers.values():
+					if s.dead or (s.sneaky and not s.revealed):
+						continue
+					var along: float = (s.pos - origin).dot(dir)
+					if along < 0.0 or along > rng:
+						continue
+					if (origin + dir * along).distance_to(s.pos) <= 0.42:
+						hits.append([along, s])
+				hits.sort_custom(func(a, b): return a[0] < b[0])
+				for k in mini(hits.size(), int(d.pierce[i])):
+					_hit(hits[k][1], dmg, t.owner)
+				_shots.append([c, end_pt, 3])
+			"beam":
+				if t.get("beam_id", -1) == target.id:
+					t.heat = minf(float(t.get("heat", 0.0)) + d.ramp[i], 2.0)
+				else:
+					t.beam_id = target.id
+					t.heat = 0.0
+				_hit(target, dmg * (1.0 + t.heat), t.owner, 0.5)
+				_shots.append([c, target.pos, 4])
+			"drum":
+				_shots.append([c, origin, 5])
+				for s in _snuffers.values():
+					if not s.dead and not s.air and s.pos.distance_to(origin) <= rng and (s.revealed or not s.sneaky):
+						_hit(s, dmg, t.owner)
+						if "honey_bomb" in tc:
+							_chill(s, 0.3, 2.0)
+							s.honey_t = maxf(s.honey_t, 2.0)
+			"swarm":
+				var pool: Array = []
+				for s in _snuffers.values():
+					if not s.dead and s.pos.distance_to(origin) <= rng:
+						var prio: float = s.dist + (100.0 if s.air or s.sneaky else 0.0)
+						pool.append([prio, s])
+				pool.sort_custom(func(a, b): return a[0] > b[0])
+				var mult := D.GLOWBUG_BONUS if "glowbug_trail" in tc else 1.0
+				for k in mini(pool.size(), int(d.targets[i])):
+					var s: Dictionary = pool[k][1]
+					_hit(s, dmg * mult, t.owner)
+					if "glowbug_trail" in tc:
+						s.reveal_t = 3.0
+					_shots.append([c, s.pos, 6])
+			"honey":
+				var center2: Vector2 = target.pos
+				_shots.append([c, center2, 7])
+				for s in _snuffers.values():
+					if not s.dead and not s.air and s.pos.distance_to(center2) <= d.splash[i]:
+						_hit(s, dmg, t.owner)
+						_chill(s, d.slow[i], d.slow_time)
+						s.honey_t = maxf(s.honey_t, d.slow_time)
+			"bounce":
+				var bounced := false
+				for s in _snuffers.values():
+					if s.dead or s.air or s.pos.distance_to(origin) > rng or D.SNUFFERS[s.type].get("boss", false):
+						continue
+					var back: int = mini(int(d.push[i]), s.idx)
+					if back <= 0:
+						continue
+					s.idx -= back
+					s.pos = _cell_center2(s.path[maxi(s.idx - 1, 0)]) if s.idx > 0 else s.pos
+					s.dist = maxf(0.0, s.dist - back)
+					bounced = true
+					if "spring_shot" in tc:
+						s.spring_t = D.SPRING_SHOT_TIME
+				if bounced:
+					_shots.append([c, origin, 8])
+				else:
+					t.cd = 0.0
 	var dead: Array = []
 	for id in _snuffers:
 		if _snuffers[id].dead:
@@ -588,24 +776,40 @@ func _chill(s: Dictionary, amount: float, time: float) -> void:
 	s.slow_t = maxf(s.slow_t, time)
 
 
-func _hit(s: Dictionary, dmg: float, owner_name: String) -> void:
+func _hit(s: Dictionary, dmg: float, owner_name: String, armor_mult := 1.0) -> void:
 	if s.dead:
 		return
-	s.hp -= maxf(1.0, dmg - s.armor)
+	if s.shield:
+		s.shield = false
+		_shots.append([Vector2i(-1, -1), s.pos, 9])
+		return
+	if s.spring_t > 0.0:
+		dmg *= D.SPRING_SHOT_BONUS
+	s.hp -= maxf(1.0, dmg - s.armor * armor_mult)
 	s.last_owner = owner_name
 	var d: Dictionary = D.SNUFFERS[s.type]
 	if d.has("sheds") and s.sheds_done < d.sheds.size() and s.hp / s.max_hp <= d.sheds[s.sheds_done]:
 		s.sheds_done += 1
 		for k in d.shed_count:
-			var offset := Vector2(randf_range(-0.3, 0.3), randf_range(-0.3, 0.3))
-			_add_snuffer("shellback", s.pos + offset, _cell_of2(s.pos))
-		_announce("The Big Shellback's shell cracked!")
+			var offset := Vector2(randf_range(-0.35, 0.35), randf_range(-0.35, 0.35))
+			_add_snuffer(d.shed_type, s.pos + offset, _cell_of2(s.pos))
+		if d.get("final", false):
+			s.speed *= 1.15
+			s.shield = true
+			_announce("The Sugar Snuffer calls for help!" if s.sheds_done == 1 else "The Sugar Snuffer is getting angry!")
+		else:
+			_announce("The %s's shell cracked!" % d.name)
 	if s.hp <= 0.0:
 		s.dead = true
 		_kills_this_wave += 1
 		_pops.append(s.pos)
 		if coins.has(owner_name):
 			coins[owner_name] += d.reward
+		if d.has("splits"):
+			for k in d.split_count:
+				var offset := Vector2(randf_range(-0.3, 0.3), randf_range(-0.3, 0.3))
+				_add_snuffer(d.splits, s.pos + offset, _cell_of2(s.pos))
+			_shots.append([Vector2i(-1, -1), s.pos, 10])
 
 
 func _send_snapshot() -> void:
@@ -620,7 +824,8 @@ func _send_snapshot() -> void:
 		pos.append(s.pos)
 		types.append(D.SNUFFER_TYPES.find(s.type))
 		hp.append(clampi(int(255.0 * s.hp / s.max_hp), 0, 255))
-		status.append((1 if s.slow_t > 0.0 else 0) | (2 if s.freeze_t > 0.0 else 0))
+		status.append((1 if s.slow_t > 0.0 else 0) | (2 if s.freeze_t > 0.0 else 0) | (4 if s.shield else 0)
+			| (8 if s.sneaky and not s.revealed else 0) | (16 if s.honey_t > 0.0 else 0))
 	var hn := PackedStringArray()
 	var hp2 := PackedVector2Array()
 	var hk := PackedByteArray()
@@ -925,6 +1130,7 @@ func _apply_state(st: Dictionary) -> void:
 		gift_allow = st.gift
 		for c in towers:
 			towers[c].oc = 1.0 if c in st.overcharged else 0.0
+			towers[c].jam = 1.0 if c in st.get("jammed", []) else 0.0
 	if visual:
 		hud.refresh()
 		view.refresh_gate()
@@ -1095,9 +1301,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not visual:
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
-		var k: int = D.TOWER_KEYS.find(event.keycode)
+		var k: int = D.FAMILY_KEYS.find(event.keycode)
 		if k >= 0:
-			select_type(D.TOWER_ORDER[k])
+			var fam: Array = D.towers_in(D.FAMILIES[k])
+			var at := fam.find(selected_type)
+			select_type(fam[(at + 1) % fam.size()] if at >= 0 else fam[0])
 		match event.keycode:
 			KEY_Q:
 				use_ability()

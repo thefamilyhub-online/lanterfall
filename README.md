@@ -6,22 +6,27 @@ Built with **Godot 4.7** (GDScript) for Windows and macOS, with a dedicated serv
 
 ![Starter towers](art/towers/starter_towers_v2.png)
 
-## Status: Phase 1 (first playable)
+## Status: Phase 2 (more towers and waves)
 
 ![In-game HUD](art/ui/hud.png)
 
-![Pip, Snuffers, heroes and Gumdrop Glade props](art/characters/phase1_models.png)
+**Gumdrop Glade**, 30 surprise waves with mini-bosses and a final boss, for 1–8 players:
 
-**Gumdrop Glade**, 15 surprise waves and a boss, for 1–8 players:
-
-- **Towers that fight:** Pebble Popper (fast shots, hits flyers), Jelly Lobber (splash, ground only), Frost Puff (slows everything nearby), Hedge Block (cheap wall). Upgrade to tier 3, sell for 80% back.
-- **Snuffers:** Scamper (fast), Shellback (armored), Flutter (flies over your maze). Wave 16 is the **Big Shellback**, who sheds little Shellbacks as its shell cracks.
+- **12 towers in four families** (press **1–4** to pick a family, press again for the next tower in it):
+  - *Shooters:* Pebble Popper (fast shots), Starseed Sling (long-range seeds that pierce), Beam Lantern (a beam that heats up on one target, great vs. bosses)
+  - *Splash:* Jelly Lobber (splash), Thunder Drum (booms all around), Firefly Swarm (several targets, flyers and Shades first)
+  - *Slow & support:* Frost Puff (chills nearby), Honey Hive (sticky slow; stops Menders healing), Beacon Post (boosts nearby towers' range, reveals Shades)
+  - *Walls:* Hedge Block (cheap wall), Bounce Pad (springs Snuffers back along the path), Mirror Stone (touching towers deal more damage)
+  - Upgrade to tier 3, sell for 80% back.
+- **Snuffers:** Scamper (fast), Shellback (armored), Flutter (flies over your maze), Splitblob (pops into Bloblings), Shade (invisible until revealed by Pip's glow, a Beacon Post or fireflies), Mender (heals friends), Bubbleguard (shields friends), Jammer (jams towers it walks past).
+- **Bosses:** Big Splitblob (waves 5 and 25), Big Shellback (10 and 20), Big Bubbleguard (15), and the **Sugar Snuffer** on wave 30, who calls for help and gets angrier as she cracks.
 - **Heroes:** **Bramble** (towers cost 10% less; *Rush Build* makes the next 3 towers 25% cheaper) and **Glint** (nearby towers fire 10% faster; *Overcharge* doubles one tower's fire rate for 8 s). Walk with WASD; you can only build within reach of your hero.
-- **Pip's glow:** towers inside the glow fire 10% faster. Every Snuffer that reaches Pip shrinks the glow.
-- **Teamwork:** towers owned by *different* players combo when they touch (Slushy, Ice Pebbles, Hedge Watch). Gift coins to teammates (up to half your coins per wave).
+- **Pip's glow:** towers inside the glow fire 10% faster, and Shades inside it are revealed. Every Snuffer that reaches Pip shrinks the glow.
+- **Teamwork combos** (towers owned by *different* players, touching): Slushy, Ice Pebbles, Hedge Watch, Prism Path, Honey Bomb, Spring Shot, Spotlight, Glowbug Trail. Gift coins to teammates (up to half your coins per wave).
 - **Ready up:** when everyone's ready the wave starts early and everyone gets a coin bonus.
 - **The licorice gate:** close the lower entrance for 2 waves (75 coins).
-- **Gumdrop Glade:** two entrances, syrup pools that slow Snuffers, gumdrop rocks. The board is a frosted cake in a candy meadow, with a chocolate river, cookie stepping stones, cupcakes and lantern posts.
+- **Gumdrop Glade:** two entrances, syrup pools that slow Snuffers, gumdrop rocks. The board is a frosted cake in a candy meadow, with a chocolate river, cookie stepping stones, cupcakes and lantern posts, and a spooky Snuffer Hollow by the entrances.
+- **Music and sound** with volume sliders.
 
 ![Gumdrop Glade overview](art/ui/glade_overview.png)
 
@@ -30,7 +35,7 @@ Built with **Godot 4.7** (GDScript) for Windows and macOS, with a dedicated serv
 | Key | Does |
 | --- | --- |
 | WASD / arrows | Walk your hero |
-| 1–4 | Pick a tower |
+| 1–4 | Pick a tower family (press again for the next tower in it) |
 | Left-click | Build (empty tile) or select (tower) |
 | U / X | Upgrade / sell the selected tower |
 | Q | Hero ability |
@@ -42,7 +47,7 @@ Built with **Godot 4.7** (GDScript) for Windows and macOS, with a dedicated serv
 1. Open the project in Godot 4.7.
 2. Press **Run** (F5).
 3. Type a name and a 4–6 digit PIN, pick a hero, then click **Host & play on this computer**.
-4. Walk near where you want to build, pick a tower with **1–4** and click to place it. Press **R** when you're ready.
+4. Walk near where you want to build, pick a tower with **1–4** (or click its card) and click to place it. Press **R** when you're ready.
 
 To test with a second player on your network, have them enter your computer's IP address and click **Join game** (UDP port 7777 must be allowed through the firewall).
 
@@ -73,6 +78,7 @@ Then open **UDP 7777** in the VPS firewall. Players join with the server's addre
 | `scripts/data.gd` | All the numbers: towers, Snuffers, waves, heroes, combos, the map |
 | `scripts/world.gd` | The match: waves, combat, coins, heroes, combos, gate (server-side) |
 | `scripts/board_view.gd` | Everything you see on the board |
+| `scripts/shapes.gd` | Built-in looks for towers and Snuffers that don't have a Blender model yet |
 | `scripts/glade_decor.gd` | Gumdrop Glade scenery: grass tiles, cake edge, syrup, meadow, river, props |
 | `scripts/hud.gd` | In-game HUD and results screen |
 | `scripts/audio.gd` | Music and sound effects (autoload `Sfx`), volume sliders |

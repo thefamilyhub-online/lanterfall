@@ -261,6 +261,22 @@ def sfx():
     save("denied", mix(marimba(note_hz(55), 0.2), np.concatenate([np.zeros(int(0.08 * SR)), marimba(note_hz(52), 0.25)])), 0.5)
     save("ready", mix(bell(note_hz(79), 0.5, 0.7, ratio=2.0), np.concatenate([np.zeros(int(0.08 * SR)), bell(note_hz(86), 0.6, 0.7, ratio=2.0)])), 0.55)
 
+    # ---- Phase 2 towers and Snuffers
+    save("shot_seed", mix(sweep(900, 2200, 0.12, "sine") * env_ad(int(0.12 * SR), 0.005, 0.05), bell(note_hz(96), 0.25, 0.4, ratio=2.0)), 0.45)
+    hum = sweep(200, 210, 0.18, "square") * 0.3 + np.sin(2 * np.pi * 820 * t_axis(0.18)) * 0.4
+    save("beam", lowpass(hum, 2500) * adsr(int(0.18 * SR), 0.01, 0.05, 0.7, 0.06), 0.35)
+    save("drum", mix(kick(1.2), noise_burst(0.35, 300, d=0.15) * 0.6, sweep(90, 45, 0.3) * env_ad(int(0.3 * SR), 0.002, 0.15)), 0.85)
+    buzz = sweep(240, 300, 0.3, "square") * (1 + 0.5 * np.sin(2 * np.pi * 40 * t_axis(0.3)))
+    save("swarm", lowpass(buzz, 1800) * adsr(int(0.3 * SR), 0.03, 0.05, 0.6, 0.12), 0.3)
+    save("honey", mix(sweep(180, 420, 0.12) * env_ad(int(0.12 * SR), 0.005, 0.08), np.concatenate([np.zeros(int(0.1 * SR)), sweep(300, 120, 0.18) * env_ad(int(0.18 * SR), 0.003, 0.1)])), 0.5)
+    boing = sweep(160, 640, 0.3, "sine") * (1 + 0.6 * np.sin(2 * np.pi * 14 * t_axis(0.3))) * env_ad(int(0.3 * SR), 0.003, 0.18)
+    save("bounce", boing, 0.6)
+    save("shield_pop", mix(sweep(1800, 600, 0.07) * env_ad(int(0.07 * SR), 0.001, 0.03), noise_burst(0.06, 6000, d=0.02) * 0.4), 0.45)
+    save("shield_up", mix(sweep(400, 1200, 0.3, "tri") * env_ad(int(0.3 * SR), 0.05, 0.15) * 0.5, bell(note_hz(91), 0.4, 0.4, ratio=1.5)), 0.4)
+    save("split", mix(noise_burst(0.15, 1200, d=0.05), sweep(600, 200, 0.12) * env_ad(int(0.12 * SR), 0.001, 0.06), np.concatenate([np.zeros(int(0.05 * SR)), marimba(note_hz(79), 0.2, 0.6)])), 0.5)
+    zap = np.sign(np.sin(2 * np.pi * 70 * t_axis(0.35))) * rng.uniform(0.3, 1.0, int(0.35 * SR))
+    save("jam", lowpass(zap, 3000) * env_ad(int(0.35 * SR), 0.005, 0.15), 0.4)
+
 
 # ------------------------------------------------------------------ music
 def song(bpm, bars, chords, melody_fn, groove, name, voice, pad_vel=0.25):

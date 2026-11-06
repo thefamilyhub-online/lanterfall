@@ -15,11 +15,15 @@ const TRIM := {
 	"boss": -5.0, "build": -3.0, "ui_click": -9.0, "ui_hover": -14.0, "gate": -3.0,
 	"shot_pebble": -7.0, "shot_jelly": -7.0, "splat": -6.0, "shot_frost": -9.0,
 	"snuffer_pop": -5.0, "leak": -2.0, "defeat": -2.0,
+	"shot_seed": -6.0, "beam": -12.0, "drum": -5.0, "swarm": -10.0, "honey": -6.0, "bounce": -4.0,
+	"shield_pop": -6.0, "shield_up": -8.0, "split": -5.0, "jam": -7.0,
 }
 ## Shortest gap between repeats of the same sound (seconds).
 const GAP := {
 	"shot_pebble": 0.07, "shot_jelly": 0.1, "splat": 0.1, "shot_frost": 0.5,
 	"snuffer_pop": 0.06, "leak": 0.3, "ui_hover": 0.05, "coin": 0.08,
+	"shot_seed": 0.1, "beam": 0.18, "drum": 0.2, "swarm": 0.25, "honey": 0.15, "bounce": 0.2,
+	"shield_pop": 0.08, "shield_up": 0.4, "split": 0.1, "jam": 0.5,
 }
 
 var enabled := true
