@@ -82,7 +82,7 @@ func setup(w: Node) -> void:
 		var t: String = D.TOWER_ORDER[i]
 		var b := Button.new()
 		b.toggle_mode = true
-		b.custom_minimum_size = Vector2(150, 52)
+		b.custom_minimum_size = Vector2(128, 52)
 		b.pressed.connect(world.select_type.bind(t))
 		b.tooltip_text = D.TOWERS[t].blurb
 		row.add_child(b)
@@ -91,9 +91,9 @@ func setup(w: Node) -> void:
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(spacer)
-	_ability_btn = _button(row, "", world.use_ability, 190)
-	_gate_btn = _button(row, "", world.close_gate, 170)
-	_ready_btn = _button(row, "", world.toggle_ready, 190)
+	_ability_btn = _button(row, "", world.use_ability, 150)
+	_gate_btn = _button(row, "", world.close_gate, 130)
+	_ready_btn = _button(row, "", world.toggle_ready, 160)
 
 	# selected tower panel (above the bottom bar, right)
 	_panel = PanelContainer.new()
@@ -193,7 +193,7 @@ func refresh() -> void:
 		_wave_label.text = "Big Shellback!" if w == D.BOSS_WAVE else "Wave %d of %d" % [w, D.LAST_WAVE]
 	for t in _tower_buttons:
 		var b: Button = _tower_buttons[t]
-		b.text = "%d %s\n%d coins" % [D.TOWER_ORDER.find(t) + 1, D.TOWERS[t].name, world.build_cost(me, t)]
+		b.text = "%d %s\n%d coins" % [D.TOWER_ORDER.find(t) + 1, D.TOWERS[t].name.replace(" ", "\u00a0"), world.build_cost(me, t)]
 		b.button_pressed = (t == world.selected_type and world.selected_cell == null)
 	var cd: float = world.hero_cd.get(me, 0.0)
 	var h: Dictionary = D.HEROES[hero]

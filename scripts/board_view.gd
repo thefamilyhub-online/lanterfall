@@ -117,10 +117,10 @@ func _build_environment() -> void:
 	add_child(sun)
 
 	camera = Camera3D.new()
-	camera.fov = 42
+	camera.fov = 40
 	add_child(camera)
-	camera.position = Vector3(0, 17.5, 12.0)
-	camera.look_at(Vector3(0, 0, 1.0))
+	camera.position = Vector3(0.6, 20.5, 13.2)
+	camera.look_at(Vector3(0.6, 0, 1.9))
 
 
 func _build_board() -> void:
@@ -475,6 +475,7 @@ func _make_hero(player_name: String, hero: String) -> Dictionary:
 		m.add_child(mesh_node(body, mat(HERO_COLORS[hero]), Vector3(0, 0.35, 0)))
 		m.add_child(mesh_node(sphere(0.2), mat(Color("#FFE0C2")), Vector3(0, 0.85, 0)))
 	m.name = "Model"
+	m.scale = Vector3.ONE * 1.35
 	root.add_child(m)
 	var label := Label3D.new()
 	label.text = "%s · %s" % [player_name, D.HEROES[hero].name]
@@ -482,7 +483,8 @@ func _make_hero(player_name: String, hero: String) -> Dictionary:
 	label.pixel_size = 0.004
 	label.font_size = 40
 	label.outline_size = 12
-	label.position.y = 1.45
+	label.position.y = 1.85
+	label.font_size = 52
 	label.modulate = HERO_COLORS[hero].lightened(0.3)
 	root.add_child(label)
 	if hero == "glint":
