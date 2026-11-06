@@ -3,10 +3,13 @@ extends Control
 ## Run with `-- --server` (Docker does this) to be a dedicated server instead.
 ##
 ## Test helpers (used by automated checks, safe to ignore):
-##   -- --join=HOST:PORT --name=NAME --pin=1234 [--place=X,Y:type|X,Y:type] [--quit-after=SECONDS]
+##   -- --join=HOST:PORT --name=NAME --pin=1234 [--hero=glint] [--place=X,Y:type|X,Y:type]
+##      [--upgrade=X,Y|X,Y] [--ready=1] [--quit-after=SECONDS]
+##   Server only: -- --server --speed=8   (runs the simulation faster, for tests)
 
 const SETTINGS_PATH := "user://settings.cfg"
 const World := preload("res://scripts/world.gd")
+const D := preload("res://scripts/data.gd")
 
 var _address: LineEdit
 var _port: SpinBox
@@ -14,11 +17,17 @@ var _name: LineEdit
 var _pin: LineEdit
 var _status: Label
 var _buttons: Array[Button] = []
+var _hero_buttons := {}
+var _hero_info: Label
 var _auto := {}
 
 
 func _ready() -> void:
 	_auto = _parse_args()
+	if _auto.has("speed"):
+		Engine.time_scale = float(_auto.speed)
+	if _auto.has("hero"):
+		Net.my_hero = _auto.hero
 	if Net.is_dedicated:
 		var port := int(OS.get_environment("LANTERNFALL_PORT")) if OS.get_environment("LANTERNFALL_PORT") != "" else Net.DEFAULT_PORT
 		if Net.start_server(port) != OK:
@@ -91,6 +100,25 @@ func _build_ui() -> void:
 	_name.placeholder_text = "e.g. Cade"
 	_pin = _field(box, "PIN (4–6 digits)", "")
 	_pin.name = "PinEdit"
+
+	_labelled(box, "Choose your hero", HBoxContainer.new())
+	var heroes := box.get_child(box.get_child_count() - 1) as HBoxContainer
+	heroes.add_theme_constant_override("separation", 8)
+	for h in D.HERO_ORDER:
+		var hb := Button.new()
+		hb.name = "Hero_" + h
+		hb.text = "%s\n%s" % [D.HEROES[h].name, D.HEROES[h].role]
+		hb.toggle_mode = true
+		hb.custom_minimum_size = Vector2(186, 56)
+		hb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		hb.pressed.connect(_pick_hero.bind(h))
+		heroes.add_child(hb)
+		_hero_buttons[h] = hb
+	_hero_info = Label.new()
+	_hero_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_hero_info.add_theme_color_override("font_color", Color("#D9D2F2"))
+	box.add_child(_hero_info)
+	_pick_hero(cfg.get_value("join", "hero", Net.my_hero))
 	_pin.secret = true
 	_pin.max_length = 6
 
@@ -132,8 +160,19 @@ func _labelled(parent: Node, label: String, control: Control) -> void:
 	parent.add_child(control)
 
 
+func _pick_hero(h: String) -> void:
+	if not D.HEROES.has(h):
+		h = "bramble"
+	Net.my_hero = h
+	for k in _hero_buttons:
+		_hero_buttons[k].button_pressed = k == h
+	var d: Dictionary = D.HEROES[h]
+	_hero_info.text = "%s: %s\n%s (Q): %s" % [d.name, d.passive, d.ability, d.ability_text]
+
+
 func _save_settings() -> void:
 	var cfg := ConfigFile.new()
+	cfg.set_value("join", "hero", Net.my_hero)
 	cfg.set_value("join", "address", _address.text)
 	cfg.set_value("join", "port", int(_port.value))
 	cfg.set_value("join", "name", _name.text)
@@ -162,8 +201,8 @@ func _on_login_finished(ok: bool, message: String) -> void:
 	if ok:
 		print("[%s] %s" % [Net.my_name, message])
 		_enter_world()
-		if _auto.has("place"):
-			_auto_place.call_deferred(_auto.place)
+		if _auto.has("place") or _auto.has("ready"):
+			_auto_place.call_deferred(_auto.get("place", ""))
 		return
 	print("[client] login failed: %s" % message)
 	if _status:
@@ -192,10 +231,46 @@ func _enter_world() -> void:
 
 func _auto_place(spec: String) -> void:
 	await get_tree().create_timer(1.0).timeout
+	var w := get_tree().root.get_node_or_null("World")
+	if w == null:
+		return
+	if _auto.has("ready"):
+		_auto_ready(w)
+	if spec == "":
+		return
 	for item in spec.split("|"):
 		var parts := item.split(":")
 		var xy := parts[0].split(",")
-		var w := get_tree().root.get_node_or_null("World")
-		if w:
-			w.place_tower(Vector2i(int(xy[0]), int(xy[1])), parts[1] if parts.size() > 1 else "hedge_block")
-		await get_tree().create_timer(0.15).timeout
+		var c := Vector2i(int(xy[0]), int(xy[1]))
+		w.debug_move_hero(c)
+		await get_tree().create_timer(0.25).timeout
+		w.place_tower(c, parts[1] if parts.size() > 1 else "hedge_block")
+		await get_tree().create_timer(0.2).timeout
+	if _auto.has("upgrade"):
+		await get_tree().create_timer(0.5).timeout
+		for item in String(_auto.upgrade).split("|"):
+			var xy := item.split(",")
+			var c := Vector2i(int(xy[0]), int(xy[1]))
+			w.debug_move_hero(c)
+			await get_tree().create_timer(0.25).timeout
+			w.selected_cell = c
+			w.upgrade_selected()
+			await get_tree().create_timer(0.2).timeout
+
+
+## Test helper: press Ready whenever a build phase starts, and keep spending
+## coins on upgrades so long automated matches stay meaningful.
+func _auto_ready(w: Node) -> void:
+	while is_instance_valid(w):
+		await get_tree().create_timer(1.0).timeout
+		if not is_instance_valid(w):
+			return
+		if w.phase == "build" and not w.ready_names.has(Net.my_name):
+			for c in w.towers:
+				if w.towers[c].owner == Net.my_name and w.upgrade_cost(Net.my_name, c) > 0 and w.my_coins() >= w.upgrade_cost(Net.my_name, c):
+					w.debug_move_hero(c)
+					await get_tree().create_timer(0.25).timeout
+					w.selected_cell = c
+					w.upgrade_selected()
+					await get_tree().create_timer(0.2).timeout
+			w.toggle_ready()
