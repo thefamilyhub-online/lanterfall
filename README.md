@@ -10,7 +10,7 @@ Built with **Godot 4.7** (GDScript) for Windows and macOS, with a dedicated serv
 
 ![In-game HUD](art/ui/hud.png)
 
-**Gumdrop Glade**, 30 surprise waves with mini-bosses and a final boss, for 1–8 players:
+Two maps, **Gumdrop Glade** and **Tanglewood**, each with 30 surprise waves, mini-bosses and a final boss, for 1–8 players:
 
 - **12 towers in four families** (press **1–4** to pick a family, press again for the next tower in it):
   - *Shooters:* Pebble Popper (fast shots), Starseed Sling (long-range seeds that pierce), Beam Lantern (a beam that heats up on one target, great vs. bosses)
@@ -26,7 +26,10 @@ Built with **Godot 4.7** (GDScript) for Windows and macOS, with a dedicated serv
 - **Ready up:** when everyone's ready the wave starts early and everyone gets a coin bonus.
 - **The licorice gate:** close the lower entrance for 2 waves (75 coins).
 - **Gumdrop Glade:** two entrances, syrup pools that slow Snuffers, gumdrop rocks. The board is a frosted cake in a candy meadow, with a chocolate river, cookie stepping stones, cupcakes and lantern posts, and a spooky Snuffer Hollow by the entrances.
+- **Tanglewood:** a lantern-lit forest at dusk with three entrances (two with vine gates), mossy stumps and thorn patches that scratch Snuffers walking through. Its final boss is the **Vine Puffer**.
 - **Music and sound** with volume sliders.
+
+![Tanglewood](art/ui/tanglewood.png)
 
 ![Gumdrop Glade overview](art/ui/glade_overview.png)
 
@@ -46,7 +49,7 @@ Built with **Godot 4.7** (GDScript) for Windows and macOS, with a dedicated serv
 
 1. Open the project in Godot 4.7.
 2. Press **Run** (F5).
-3. Type a name and a 4–6 digit PIN, pick a hero, then click **Host & play on this computer**.
+3. Type a name and a 4–6 digit PIN, pick a hero and a map, then click **Host & play on this computer**.
 4. Walk near where you want to build, pick a tower with **1–4** (or click its card) and click to place it. Press **R** when you're ready.
 
 To test with a second player on your network, have them enter your computer's IP address and click **Join game** (UDP port 7777 must be allowed through the firewall).
@@ -64,6 +67,7 @@ docker logs -f lanternfall-server     # should say "listening on UDP 7777"
 
 Then open **UDP 7777** in the VPS firewall. Players join with the server's address.
 
+- Pick the map with `LANTERNFALL_MAP` in `server/docker-compose.yml` (`gumdrop_glade` or `tanglewood`).
 - Accounts and progress are stored in the `lanternfall-data` Docker volume and survive rebuilds.
 - To update: `git pull && docker compose -f server/docker-compose.yml up -d --build`.
 - Clients and server must run the same game version; the login screen says so if they don't.
@@ -79,6 +83,7 @@ Then open **UDP 7777** in the VPS firewall. Players join with the server's addre
 | `scripts/world.gd` | The match: waves, combat, coins, heroes, combos, gate (server-side) |
 | `scripts/board_view.gd` | Everything you see on the board |
 | `scripts/shapes.gd` | Built-in looks for towers and Snuffers that don't have a Blender model yet |
+| `scripts/tanglewood_decor.gd` | Tanglewood scenery: mossy board, log border, thorns, lantern trees |
 | `scripts/glade_decor.gd` | Gumdrop Glade scenery: grass tiles, cake edge, syrup, meadow, river, props |
 | `scripts/hud.gd` | In-game HUD and results screen |
 | `scripts/audio.gd` | Music and sound effects (autoload `Sfx`), volume sliders |

@@ -80,7 +80,7 @@ const TOWERS := {
 	"bounce_pad": {
 		name = "Bounce Pad", family = "wall", cost = 120, upgrade = [90, 150], air = false, kind = "bounce",
 		range = [1.25, 1.35, 1.5], rate = [0.25, 0.3, 0.36], push = [2, 2, 3],
-		blurb = "A wall that springs nearby Snuffers back along the path.",
+		blurb = "A wall that springs nearby Snuffers back along the path (up to 3 times each).",
 	},
 	"mirror_stone": {
 		name = "Mirror Stone", family = "wall", cost = 160, upgrade = [110, 180], air = false, kind = "mirror",
@@ -129,6 +129,8 @@ const ICE_PEBBLE_SLOW := 0.2
 const ICE_PEBBLE_TIME := 1.5
 const HEDGE_WATCH_RANGE := 0.75
 const PRISM_BONUS := 1.3
+const WAVE_TIMEOUT := 420.0   # seconds before stragglers rush Pip
+const MAX_BOUNCES := 3   # a Snuffer can only be bounced this many times
 const SPRING_SHOT_BONUS := 1.2
 const SPRING_SHOT_TIME := 3.0
 const SPOTLIGHT_RANGE := 2.0
@@ -136,7 +138,7 @@ const GLOWBUG_BONUS := 1.25
 
 # ------------------------------------------------------------------ snuffers
 const SNUFFER_TYPES := ["scamper", "shellback", "flutter", "big_shellback", "splitblob", "blobling", "shade", "mender",
-	"bubbleguard", "jammer", "big_splitblob", "big_bubbleguard", "sugar_snuffer"]
+	"bubbleguard", "jammer", "big_splitblob", "big_bubbleguard", "sugar_snuffer", "vine_puffer"]
 const SNUFFERS := {
 	"scamper": {name = "Scamper", hp = 20.0, armor = 0.0, speed = 2.6, reward = 4, damage = 3.0, air = false, size = 0.8},
 	"shellback": {name = "Shellback", hp = 60.0, armor = 3.0, speed = 1.4, reward = 9, damage = 6.0, air = false, size = 1.0},
@@ -155,10 +157,12 @@ const SNUFFERS := {
 	# ---- bosses
 	"big_shellback": {name = "Big Shellback", hp = 900.0, armor = 4.0, speed = 0.8, reward = 150, damage = 40.0, air = false, size = 2.2,
 		sheds = [0.66, 0.33], shed_count = 3, shed_type = "shellback", boss = true},
-	"big_splitblob": {name = "Big Splitblob", hp = 700.0, armor = 1.0, speed = 0.9, reward = 120, damage = 35.0, air = false, size = 2.1,
-		splits = "splitblob", split_count = 4, boss = true},
+	"big_splitblob": {name = "Big Splitblob", hp = 560.0, armor = 1.0, speed = 0.9, reward = 120, damage = 30.0, air = false, size = 2.1,
+		splits = "splitblob", split_count = 3, boss = true},
 	"big_bubbleguard": {name = "Big Bubbleguard", hp = 1100.0, armor = 3.0, speed = 0.8, reward = 160, damage = 40.0, air = false, size = 2.2,
 		shield_every = 2.5, shield_range = 2.4, boss = true},
+	"vine_puffer": {name = "Vine Puffer", hp = 3400.0, armor = 4.0, speed = 0.7, reward = 400, damage = 100.0, air = false, size = 2.8,
+		sheds = [0.66, 0.33], shed_count = 4, shed_type = "splitblob", heal = 0.0, boss = true, final = true},
 	"sugar_snuffer": {name = "Sugar Snuffer", hp = 3200.0, armor = 5.0, speed = 0.7, reward = 400, damage = 100.0, air = false, size = 2.8,
 		sheds = [0.66, 0.33], shed_count = 6, shed_type = "scamper", heal = 0.0, boss = true, final = true},
 }
@@ -184,7 +188,7 @@ static func wave_hp_scale(wave: int) -> float:
 static func wave_list(wave: int, rng: RandomNumberGenerator) -> Array[String]:
 	var out: Array[String] = []
 	if wave == BOSS_WAVE:
-		out.append("sugar_snuffer")
+		out.append(MAP.final_boss)
 		for i in 10:
 			out.append(["scamper", "shellback", "mender"][i % 3])
 		return out
@@ -230,21 +234,50 @@ const GLINT_AURA_RANGE := 3.0
 const GLINT_AURA_BONUS := 1.10
 const OVERCHARGE_TIME := 8.0
 
-# ------------------------------------------------------------------ Gumdrop Glade
-const MAP := {
-	name = "Gumdrop Glade",
-	w = 24, h = 14,
-	entrances = [Vector2i(0, 3), Vector2i(0, 10)],
-	gate_entrance = 1,  # the lower entrance has the licorice gate
-	pip = Vector2i(23, 7),
-	rocks = [Vector2i(6, 0), Vector2i(6, 1), Vector2i(5, 13), Vector2i(12, 12), Vector2i(12, 13),
-		Vector2i(17, 2), Vector2i(18, 2), Vector2i(17, 3), Vector2i(20, 12), Vector2i(21, 12)],
-	syrup = [Vector2i(10, 5), Vector2i(11, 5), Vector2i(10, 6), Vector2i(11, 6),
-		Vector2i(15, 9), Vector2i(16, 9), Vector2i(15, 10), Vector2i(16, 10)],
-	trees = [Vector2(-1.4, -1.0), Vector2(-1.3, 14.6), Vector2(8.0, -1.3), Vector2(14.5, 15.0),
-		Vector2(25.2, 2.0), Vector2(25.3, 12.0), Vector2(19.0, -1.4), Vector2(3.0, 15.2)],
+# ------------------------------------------------------------------ maps
+const MAPS := {
+	"gumdrop_glade": {
+		id = "gumdrop_glade", name = "Gumdrop Glade", theme = "candy",
+		blurb = "A frosted cake in a candy meadow. Two entrances, syrup pools.",
+		w = 24, h = 14,
+		entrances = [Vector2i(0, 3), Vector2i(0, 10)],
+		gates = [1],  # the lower entrance has the licorice gate
+		pip = Vector2i(23, 7),
+		rocks = [Vector2i(6, 0), Vector2i(6, 1), Vector2i(5, 13), Vector2i(12, 12), Vector2i(12, 13),
+			Vector2i(17, 2), Vector2i(18, 2), Vector2i(17, 3), Vector2i(20, 12), Vector2i(21, 12)],
+		syrup = [Vector2i(10, 5), Vector2i(11, 5), Vector2i(10, 6), Vector2i(11, 6),
+			Vector2i(15, 9), Vector2i(16, 9), Vector2i(15, 10), Vector2i(16, 10)],
+		thorns = [],
+		trees = [Vector2(-1.4, -1.0), Vector2(-1.3, 14.6), Vector2(8.0, -1.3), Vector2(14.5, 15.0),
+			Vector2(25.2, 2.0), Vector2(25.3, 12.0), Vector2(19.0, -1.4), Vector2(3.0, 15.2)],
+		final_boss = "sugar_snuffer",
+	},
+	"tanglewood": {
+		id = "tanglewood", name = "Tanglewood", theme = "forest",
+		blurb = "A lantern-lit forest at dusk. Three entrances, two gates, thorn patches.",
+		w = 24, h = 14,
+		entrances = [Vector2i(0, 2), Vector2i(0, 7), Vector2i(0, 11)],
+		gates = [0, 2],  # top and bottom entrances have vine gates
+		pip = Vector2i(23, 7),
+		rocks = [Vector2i(5, 0), Vector2i(5, 1), Vector2i(9, 13), Vector2i(10, 13), Vector2i(14, 0),
+			Vector2i(15, 0), Vector2i(14, 1), Vector2i(19, 12), Vector2i(20, 12), Vector2i(20, 13), Vector2i(11, 7)],
+		syrup = [],
+		thorns = [Vector2i(7, 4), Vector2i(8, 4), Vector2i(7, 9), Vector2i(8, 9), Vector2i(13, 5),
+			Vector2i(13, 6), Vector2i(17, 3), Vector2i(17, 10), Vector2i(18, 10)],
+		trees = [],
+		final_boss = "vine_puffer",
+	},
 }
+const MAP_ORDER := ["gumdrop_glade", "tanglewood"]
+static var MAP: Dictionary = MAPS.gumdrop_glade
+
+
+static func select_map(id: String) -> void:
+	MAP = MAPS.get(id, MAPS.gumdrop_glade)
+
+
 const SYRUP_SLOW := 0.3
+const THORN_DPS := 6.0       # thorn damage per second (grows with waves)
 const GATE_COST := 75
 const GATE_WAVES := 2
 const GATE_COOLDOWN_WAVES := 3

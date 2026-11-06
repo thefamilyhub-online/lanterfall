@@ -18,6 +18,7 @@ var H: int = D.MAP.h
 var astar := AStarGrid2D.new()
 var rocks := {}
 var syrup := {}
+var thorns := {}
 
 # ---- shared match state (server decides, clients mirror)
 var towers: Dictionary = {}       # Vector2i -> {type, owner, tier, spent, cd, oc}
@@ -40,6 +41,8 @@ var gift_allow: Dictionary = {}   # name -> coins still giftable this wave
 # ---- server only
 var _snuffers: Dictionary = {}
 var _next_id := 1
+var _thorn_hits: Array = []
+var _wave_t := 0.0
 var _spawn_queue: Array = []      # [type, entrance index]
 var _spawn_timer := 0.0
 var _rng := RandomNumberGenerator.new()
@@ -71,6 +74,8 @@ func _ready() -> void:
 		astar.set_point_solid(r, true)
 	for s in D.MAP.syrup:
 		syrup[s] = true
+	for t in D.MAP.thorns:
+		thorns[t] = true
 	_rng.randomize()
 	my_pos = _cell_center2(D.MAP.pip) + Vector2(-4, 0)
 	visual = not Net.is_dedicated
@@ -129,7 +134,7 @@ func in_glow(c: Vector2i) -> bool:
 
 
 func is_blocked_cell(c: Vector2i) -> bool:
-	return c in D.MAP.entrances or c == D.MAP.pip or rocks.has(c) or syrup.has(c)
+	return c in D.MAP.entrances or c == D.MAP.pip or rocks.has(c) or syrup.has(c) or thorns.has(c)
 
 
 func tower_range(c: Vector2i) -> float:
@@ -383,6 +388,12 @@ func _physics_process(delta: float) -> void:
 			elif _all_ready():
 				_start_wave(true)
 		"wave":
+			_wave_t += delta
+			if _wave_t > D.WAVE_TIMEOUT and not _snuffers.is_empty():
+				# safety net: nothing may stall a wave forever
+				for s in _snuffers.values():
+					s.path = []
+					s.idx = 0
 			_spawn(delta)
 			_move_snuffers(delta)
 			if phase == "wave":
@@ -424,6 +435,7 @@ func _start_wave(early: bool) -> void:
 				wave = int(a.substr(13)) - 1   # test helper
 	wave += 1
 	phase = "wave"
+	_wave_t = 0.0
 	ready_names.clear()
 	_kills_this_wave = 0
 	_leaks_this_wave = 0
@@ -435,11 +447,11 @@ func _start_wave(early: bool) -> void:
 	_spawn_queue.clear()
 	var entrances: Array = [0, 1]
 	if gate_closed_waves > 0:
-		entrances = [1 - D.MAP.gate_entrance]
+		entrances = range(D.MAP.entrances.size()).filter(func(k): return not k in D.MAP.gates)
 	for i in list.size():
 		_spawn_queue.append([list[i], entrances[i % entrances.size()]])
 	_spawn_timer = 0.5
-	var label := "The Sugar Snuffer is coming!" if wave == D.BOSS_WAVE else "Wave %d of %d!" % [wave, D.BOSS_WAVE]
+	var label := "The %s is coming!" % D.SNUFFERS[D.MAP.final_boss].name if wave == D.BOSS_WAVE else "Wave %d of %d!" % [wave, D.BOSS_WAVE]
 	if bonus > 0:
 		label += "  Early call: +%d coins each" % bonus
 	_announce(label)
@@ -527,6 +539,7 @@ func _move_snuffers(delta: float) -> void:
 	var pip := _cell_center2(D.MAP.pip)
 	var leaked: Array = []
 	_snuffer_powers(delta)
+	_thorn_hits.clear()
 	for id in _snuffers:
 		var s: Dictionary = _snuffers[id]
 		s.slow_t = maxf(0.0, s.slow_t - delta)
@@ -541,6 +554,11 @@ func _move_snuffers(delta: float) -> void:
 			spd = 0.0
 		if not s.air and syrup.has(_cell_of2(s.pos)):
 			spd *= 1.0 - D.SYRUP_SLOW
+		if not s.air and thorns.has(_cell_of2(s.pos)):
+			s.thorn_t = float(s.get("thorn_t", 0.0)) - delta
+			if s.thorn_t <= 0.0:
+				s.thorn_t = 0.5
+				_thorn_hits.append(s)
 		var step := spd * delta
 		if s.air:
 			var d: float = s.pos.distance_to(pip)
@@ -565,8 +583,13 @@ func _move_snuffers(delta: float) -> void:
 				step = 0.0
 		if s.idx >= s.path.size():
 			leaked.append(id)
+	for s in _thorn_hits:
+		if not s.dead:
+			_hit(s, D.THORN_DPS * 0.5 * D.wave_hp_scale(wave), "")
 	for id in leaked:
 		var s: Dictionary = _snuffers[id]
+		if s.dead:
+			continue
 		glow -= D.SNUFFERS[s.type].damage
 		_leaks_this_wave += 1
 		_snuffers.erase(id)
@@ -749,6 +772,9 @@ func _towers_fire(delta: float) -> void:
 				for s in _snuffers.values():
 					if s.dead or s.air or s.pos.distance_to(origin) > rng or D.SNUFFERS[s.type].get("boss", false):
 						continue
+					if int(s.get("bounces", 0)) >= D.MAX_BOUNCES:
+						continue
+					s.bounces = int(s.get("bounces", 0)) + 1
 					var back: int = mini(int(d.push[i]), s.idx)
 					if back <= 0:
 						continue
@@ -796,7 +822,7 @@ func _hit(s: Dictionary, dmg: float, owner_name: String, armor_mult := 1.0) -> v
 		if d.get("final", false):
 			s.speed *= 1.15
 			s.shield = true
-			_announce("The Sugar Snuffer calls for help!" if s.sheds_done == 1 else "The Sugar Snuffer is getting angry!")
+			_announce(("The %s calls for help!" if s.sheds_done == 1 else "The %s is getting angry!") % d.name)
 		else:
 			_announce("The %s's shell cracked!" % d.name)
 	if s.hp <= 0.0:

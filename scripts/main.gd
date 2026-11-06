@@ -22,6 +22,7 @@ var _pin: LineEdit
 var _status: Label
 var _buttons: Array[Button] = []
 var _hero_buttons := {}
+var _map_buttons := {}
 var _hero_info: Label
 var _auto := {}
 
@@ -159,6 +160,23 @@ func _build_ui() -> void:
 	var join := UI.button(box, "JOIN GAME", "GoldButton", _on_join, Vector2(0, 68))
 	join.add_theme_font_size_override("font_size", 26)
 	var host := UI.button(box, "Host & play on this computer", "Button", _on_host, Vector2(0, 56))
+	UI.label(box, "Map (when you host)", 16, UI.LILAC)
+	var maps := HBoxContainer.new()
+	maps.add_theme_constant_override("separation", 8)
+	box.add_child(maps)
+	for id in D.MAP_ORDER:
+		var mb := Button.new()
+		mb.name = "Map_" + id
+		mb.text = D.MAPS[id].name
+		mb.toggle_mode = true
+		mb.custom_minimum_size = Vector2(0, 46)
+		mb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		mb.add_theme_font_size_override("font_size", 16)
+		mb.tooltip_text = D.MAPS[id].blurb
+		mb.pressed.connect(_pick_map.bind(id))
+		maps.add_child(mb)
+		_map_buttons[id] = mb
+	_pick_map(cfg.get_value("join", "map", Net.map_id))
 	_buttons = [join, host]
 
 	_status = UI.label(box, "", 16, UI.LILAC)
@@ -218,8 +236,19 @@ func _pick_hero(h: String) -> void:
 	_hero_info.text = "%s\n%s (Q): %s" % [d.passive, d.ability, d.ability_text]
 
 
+func _pick_map(id: String) -> void:
+	if not D.MAPS.has(id):
+		id = "gumdrop_glade"
+	Net.map_id = id
+	for k in _map_buttons:
+		_map_buttons[k].button_pressed = k == id
+		_map_buttons[k].theme_type_variation = "GoldButton" if k == id else "Button"
+
+
 func _save_settings() -> void:
 	var cfg := ConfigFile.new()
+	cfg.load(SETTINGS_PATH)
+	cfg.set_value("join", "map", Net.map_id)
 	cfg.set_value("join", "hero", Net.my_hero)
 	cfg.set_value("join", "address", _address.text)
 	cfg.set_value("join", "port", int(_port.value))

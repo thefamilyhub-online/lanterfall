@@ -186,6 +186,20 @@ static func tower(type: String) -> Node3D:
 	return r
 
 
+## A mossy tree stump (Tanglewood's obstacle).
+static func stump() -> Node3D:
+	var r := Node3D.new()
+	part(r, cyl(0.34, 0.42, 0.45, 12), m(Color("#7A5233"), 0.0, 1.0, 0.0, 0.9), Vector3(0, 0.22, 0))
+	part(r, cyl(0.33, 0.33, 0.02, 12), m(Color("#D9B98A"), 0.0, 1.0, 0.0, 0.8), Vector3(0, 0.455, 0))
+	part(r, torus(0.2, 0.015), m(Color("#A67C52")), Vector3(0, 0.46, 0))
+	part(r, ball(0.16, 10), m(Color("#5E9E4A"), 0.0, 1.0, 0.0, 0.95), Vector3(0.22, 0.42, 0.1), Vector3.ZERO, Vector3(1, 0.5, 1))
+	part(r, ball(0.08, 8), m(Color("#FF8F6B")), Vector3(-0.3, 0.1, 0.2), Vector3.ZERO, Vector3(1, 0.6, 1))
+	for k in 3:
+		var a := k * 2.1
+		part(r, cyl(0.03, 0.08, 0.3, 6), m(Color("#6B4528")), Vector3(cos(a) * 0.4, 0.06, sin(a) * 0.4), Vector3(0, -a, 1.3))
+	return r
+
+
 # ================================================================ snuffers
 
 static func eyes(root: Node3D, y: float, z: float, spread := 0.1, s := 1.0, color := Color("#FFF3D6")) -> void:
@@ -228,6 +242,16 @@ static func snuffer(type: String) -> Node3D:
 				part(r, cyl(0.06, 0.06, 0.04, 10), m(Color("#9FE3FF"), 1.2), Vector3(side * 0.09, 0.34, -0.26), Vector3(PI / 2, 0, 0))
 				part(r, cyl(0.012, 0.012, 0.3, 6), m(Color("#3B2A55")), Vector3(side * 0.1, 0.62, 0.02), Vector3(0, 0, side * 0.3))
 				part(r, ball(0.045, 8), m(Color("#FFE24D"), 3.0), Vector3(side * 0.15, 0.77, 0.02))
+		"vine_puffer":
+			part(r, ball(0.3, 20), m(Color("#5FAF4E")), Vector3(0, 0.3, 0))
+			for k in 8:
+				var a := k * TAU / 8.0
+				part(r, cyl(0.0, 0.06, 0.2, 6), m(Color("#3E7A35")), Vector3(cos(a) * 0.28, 0.32 + sin(k * 1.7) * 0.08, sin(a) * 0.28), Vector3(0, -a, PI / 2))
+			for k in 4:
+				var a := k * TAU / 4.0 + 0.4
+				part(r, ball(0.07, 10), m(Color("#FF6F91"), 0.5), Vector3(cos(a) * 0.12, 0.6, sin(a) * 0.12))
+			part(r, ball(0.06, 10), m(Color("#FFD34D"), 1.0), Vector3(0, 0.64, 0))
+			eyes(r, 0.38, -0.25, 0.11, 1.1, Color("#F6FFD6"))
 		"sugar_snuffer":
 			part(r, ball(0.3, 20), m(Color("#FF8FC8")), Vector3(0, 0.3, 0))
 			part(r, ball(0.16, 14), m(Color("#FFF0F6")), Vector3(0, 0.25, -0.2), Vector3.ZERO, Vector3(1, 0.7, 0.6))
