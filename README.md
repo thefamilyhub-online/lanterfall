@@ -6,23 +6,39 @@ Built with **Godot 4.7** (GDScript) for Windows and macOS, with a dedicated serv
 
 ![Starter towers](art/towers/starter_towers_v2.png)
 
-## Status: Phase 0 (foundations)
+## Status: Phase 1 (first playable)
 
-- 20 × 12 test board with a Waygate (spawn) and Pip
-- Snuffers walk the shortest open path; towers reshape it, and a placement that would seal the path is refused
-- Four starter tower models (Pebble Popper, Jelly Lobber, Frost Puff, Hedge Block)
-- Server-authoritative multiplayer for up to 8 players (ENet over UDP)
-- Username + PIN accounts saved on the server (PINs salted and hashed)
-- "Host & play" for testing on one computer, or a dedicated Docker server
+![Pip, Snuffers, heroes and Gumdrop Glade props](art/characters/phase1_models.png)
 
-Towers don't attack yet; that's Phase 1.
+**Gumdrop Glade**, 15 surprise waves and a boss, for 1–8 players:
+
+- **Towers that fight:** Pebble Popper (fast shots, hits flyers), Jelly Lobber (splash, ground only), Frost Puff (slows everything nearby), Hedge Block (cheap wall). Upgrade to tier 3, sell for 80% back.
+- **Snuffers:** Scamper (fast), Shellback (armored), Flutter (flies over your maze). Wave 16 is the **Big Shellback**, who sheds little Shellbacks as its shell cracks.
+- **Heroes:** **Bramble** (towers cost 10% less; *Rush Build* makes the next 3 towers 25% cheaper) and **Glint** (nearby towers fire 10% faster; *Overcharge* doubles one tower's fire rate for 8 s). Walk with WASD; you can only build within reach of your hero.
+- **Pip's glow:** towers inside the glow fire 10% faster. Every Snuffer that reaches Pip shrinks the glow.
+- **Teamwork:** towers owned by *different* players combo when they touch (Slushy, Ice Pebbles, Hedge Watch). Gift coins to teammates (up to half your coins per wave).
+- **Ready up:** when everyone's ready the wave starts early and everyone gets a coin bonus.
+- **The licorice gate:** close the lower entrance for 2 waves (75 coins).
+- **Gumdrop Glade:** two entrances, syrup pools that slow Snuffers, gumdrop rocks.
+
+### Controls
+
+| Key | Does |
+| --- | --- |
+| WASD / arrows | Walk your hero |
+| 1–4 | Pick a tower |
+| Left-click | Build (empty tile) or select (tower) |
+| U / X | Upgrade / sell the selected tower |
+| Q | Hero ability |
+| R | Ready for the next wave |
+| Right-click / Esc | Deselect |
 
 ## Play it from the editor
 
 1. Open the project in Godot 4.7.
 2. Press **Run** (F5).
-3. Type a name and a 4–6 digit PIN, then click **Host & play on this computer**.
-4. Pick a tower with **1–4** or the buttons, left-click to place, right-click to remove one of yours.
+3. Type a name and a 4–6 digit PIN, pick a hero, then click **Host & play on this computer**.
+4. Walk near where you want to build, pick a tower with **1–4** and click to place it. Press **R** when you're ready.
 
 To test with a second player on your network, have them enter your computer's IP address and click **Join game** (UDP port 7777 must be allowed through the firewall).
 
@@ -50,10 +66,12 @@ Then open **UDP 7777** in the VPS firewall. Players join with the server's addre
 | `scenes/main.tscn` | Start screen (entry scene) |
 | `scripts/net.gd` | Networking: host, join, logins, player list (autoload `Net`) |
 | `scripts/accounts.gd` | Server-side accounts and saved progress (autoload `Accounts`) |
-| `scripts/world.gd` | The board: path shaping, Snuffers, tower placement |
+| `scripts/data.gd` | All the numbers: towers, Snuffers, waves, heroes, combos, the map |
+| `scripts/world.gd` | The match: waves, combat, coins, heroes, combos, gate (server-side) |
+| `scripts/board_view.gd` | Everything you see on the board |
 | `scripts/hud.gd` | In-game HUD |
-| `assets/towers/*.glb` | Tower models used by the game (textures baked in) |
-| `art/towers/` | Blender source files and renders (ignored by Godot) |
+| `assets/` | Models used by the game (textures baked in) |
+| `art/` | Blender source files, renders and `art/tools/lanternfall_models.py` (ignored by Godot) |
 | `server/` | Dockerfile and compose file for the dedicated server |
 
 ## Credits
