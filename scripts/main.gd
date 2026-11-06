@@ -6,10 +6,14 @@ extends Control
 ##   -- --join=HOST:PORT --name=NAME --pin=1234 [--hero=glint] [--place=X,Y:type|X,Y:type]
 ##      [--upgrade=X,Y|X,Y] [--ready=1] [--quit-after=SECONDS]
 ##   Server only: -- --server --speed=8   (runs the simulation faster, for tests)
+##   Screenshots (needs a display): --shot=/abs/path.png --shot-after=SECONDS
+##      [--select=X,Y] [--preview-results=1] [--cam=X,Y,Z[,lookZ]]
 
 const SETTINGS_PATH := "user://settings.cfg"
 const World := preload("res://scripts/world.gd")
 const D := preload("res://scripts/data.gd")
+const UI := preload("res://scripts/ui_theme.gd")
+const CardButton := preload("res://scripts/card_button.gd")
 
 var _address: LineEdit
 var _port: SpinBox
@@ -42,6 +46,8 @@ func _ready() -> void:
 	if _auto.has("join"):
 		var parts: PackedStringArray = _auto.join.split(":")
 		Net.join(parts[0], int(parts[1]) if parts.size() > 1 else Net.DEFAULT_PORT, _auto.get("name", "Tester"), _auto.get("pin", "1234"))
+	if _auto.has("shot"):
+		get_tree().create_timer(float(_auto.get("shot-after", "3"))).timeout.connect(_take_shot)
 	if _auto.has("quit-after"):
 		get_tree().create_timer(float(_auto["quit-after"])).timeout.connect(func(): get_tree().quit())
 
@@ -57,65 +63,80 @@ func _parse_args() -> Dictionary:
 
 func _build_ui() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
-	var bg := ColorRect.new()
-	bg.color = Color("#0B1226")
+	theme = UI.theme()
+	var bg := TextureRect.new()
+	var grad := Gradient.new()
+	grad.set_color(0, Color("#0B1226"))
+	grad.set_color(1, Color("#33226B"))
+	var gt := GradientTexture2D.new()
+	gt.gradient = grad
+	gt.fill_from = Vector2(0.5, 0)
+	gt.fill_to = Vector2(0.5, 1)
+	bg.texture = gt
+	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	bg.stretch_mode = TextureRect.STRETCH_SCALE
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
+	_add_stars()
 
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(center)
 
-	# two columns so everything fits in a small window: brand + hero | sign-in
+	# two columns: brand + hero | sign-in
 	var cols := HBoxContainer.new()
-	cols.add_theme_constant_override("separation", 40)
+	cols.add_theme_constant_override("separation", 48)
 	center.add_child(cols)
 	var left := VBoxContainer.new()
-	left.custom_minimum_size = Vector2(390, 0)
-	left.add_theme_constant_override("separation", 8)
+	left.custom_minimum_size = Vector2(420, 0)
+	left.add_theme_constant_override("separation", 10)
+	left.alignment = BoxContainer.ALIGNMENT_CENTER
 	cols.add_child(left)
-	var box := VBoxContainer.new()
-	box.custom_minimum_size = Vector2(360, 0)
-	box.add_theme_constant_override("separation", 6)
-	box.alignment = BoxContainer.ALIGNMENT_CENTER
-	cols.add_child(box)
 
-	var icon := TextureRect.new()
-	icon.texture = load("res://icon.svg")
-	icon.custom_minimum_size = Vector2(96, 96)
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	left.add_child(icon)
-
-	var title := Label.new()
-	title.text = "LANTERNFALL"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 40)
-	title.add_theme_color_override("font_color", Color("#FFC44D"))
-	left.add_child(title)
+	var brand := HBoxContainer.new()
+	brand.alignment = BoxContainer.ALIGNMENT_CENTER
+	brand.add_theme_constant_override("separation", 10)
+	left.add_child(brand)
+	UI.picture(brand, load("res://icon.svg"), Vector2(84, 84))
+	var bt := VBoxContainer.new()
+	bt.add_theme_constant_override("separation", -6)
+	brand.add_child(bt)
+	UI.label(bt, "LANTERNFALL", 54, UI.GOLD, true, 12)
+	UI.label(bt, "Keep Pip glowing!", 20, UI.LILAC, true, 6)
 
 	var cfg := ConfigFile.new()
 	cfg.load(SETTINGS_PATH)
 
-	_labelled(left, "Choose your hero", HBoxContainer.new())
-	var heroes := left.get_child(left.get_child_count() - 1) as HBoxContainer
-	heroes.add_theme_constant_override("separation", 8)
+	var rib := UI.panel(left, "Ribbon")
+	rib.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var rl := UI.label(rib, "CHOOSE YOUR HERO", 22, Color.WHITE, true, 7)
+	rl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var heroes := HBoxContainer.new()
+	heroes.alignment = BoxContainer.ALIGNMENT_CENTER
+	heroes.add_theme_constant_override("separation", 22)
+	left.add_child(heroes)
 	for h in D.HERO_ORDER:
-		var hb := Button.new()
+		var hb := CardButton.new()
 		hb.name = "Hero_" + h
-		hb.text = "%s\n%s" % [D.HEROES[h].name, D.HEROES[h].role]
-		hb.toggle_mode = true
-		hb.custom_minimum_size = Vector2(186, 56)
-		hb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		hb.pressed.connect(_pick_hero.bind(h))
 		heroes.add_child(hb)
+		hb.setup(UI.icon(h), D.HEROES[h].name, Vector2(170, 200), "", D.HEROES[h].role)
+		hb.pressed.connect(_pick_hero.bind(h))
 		_hero_buttons[h] = hb
-	_hero_info = Label.new()
+	var info := UI.panel(left, "SoftPanel")
+	_hero_info = UI.label(info, "", 17, UI.CREAM)
 	_hero_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_hero_info.custom_minimum_size = Vector2(390, 0)
-	_hero_info.add_theme_color_override("font_color", Color("#D9D2F2"))
-	left.add_child(_hero_info)
+	_hero_info.custom_minimum_size = Vector2(396, 0)
 	_pick_hero(cfg.get_value("join", "hero", Net.my_hero))
+
+	var panel := PanelContainer.new()
+	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	cols.add_child(panel)
+	var box := VBoxContainer.new()
+	box.custom_minimum_size = Vector2(380, 0)
+	box.add_theme_constant_override("separation", 6)
+	panel.add_child(box)
+	var sh := UI.label(box, "SIGN IN", 30, UI.GOLD, true, 8)
+	sh.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	_address = _field(box, "Server address", cfg.get_value("join", "address", "127.0.0.1"))
 	_address.name = "AddressEdit"
@@ -132,30 +153,41 @@ func _build_ui() -> void:
 	_pin.secret = true
 	_pin.max_length = 6
 
-	var join := Button.new()
-	join.text = "Join game"
-	join.custom_minimum_size.y = 46
-	join.pressed.connect(_on_join)
-	box.add_child(join)
-	var host := Button.new()
-	host.text = "Host & play on this computer"
-	host.custom_minimum_size.y = 40
-	host.pressed.connect(_on_host)
-	box.add_child(host)
+	var gap := Control.new()
+	gap.custom_minimum_size.y = 6
+	box.add_child(gap)
+	var join := UI.button(box, "JOIN GAME", "GoldButton", _on_join, Vector2(0, 68))
+	join.add_theme_font_size_override("font_size", 26)
+	var host := UI.button(box, "Host & play on this computer", "Button", _on_host, Vector2(0, 56))
 	_buttons = [join, host]
 
-	_status = Label.new()
+	_status = UI.label(box, "", 16, UI.LILAC)
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_status.custom_minimum_size = Vector2(360, 0)
+	_status.custom_minimum_size = Vector2(380, 0)
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_status.add_theme_color_override("font_color", Color("#B9C2DA"))
-	box.add_child(_status)
 
-	var ver := Label.new()
-	ver.text = "Version %s" % Net.GAME_VERSION
+	var ver := UI.label(left, "Version %s" % Net.GAME_VERSION, 14, Color("#6E78A8"))
 	ver.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ver.add_theme_color_override("font_color", Color("#5E6B8C"))
-	left.add_child(ver)
+
+
+## A sprinkle of twinkly stars on the night sky.
+func _add_stars() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	for i in 70:
+		var s := ColorRect.new()
+		var r := rng.randf_range(1.5, 3.5)
+		s.color = Color(1, 0.95, 0.8, rng.randf_range(0.25, 0.8))
+		s.anchor_left = rng.randf()
+		s.anchor_top = rng.randf() * 0.85
+		s.anchor_right = s.anchor_left
+		s.anchor_bottom = s.anchor_top
+		s.offset_left = 0
+		s.offset_top = 0
+		s.offset_right = r
+		s.offset_bottom = r
+		s.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(s)
 
 
 func _field(parent: Node, label: String, value: String) -> LineEdit:
@@ -166,9 +198,7 @@ func _field(parent: Node, label: String, value: String) -> LineEdit:
 
 
 func _labelled(parent: Node, label: String, control: Control) -> void:
-	var l := Label.new()
-	l.text = label
-	parent.add_child(l)
+	UI.label(parent, label, 16, UI.LILAC)
 	parent.add_child(control)
 
 
@@ -177,9 +207,9 @@ func _pick_hero(h: String) -> void:
 		h = "bramble"
 	Net.my_hero = h
 	for k in _hero_buttons:
-		_hero_buttons[k].button_pressed = k == h
+		_hero_buttons[k].set_selected(k == h)
 	var d: Dictionary = D.HEROES[h]
-	_hero_info.text = "%s: %s\n%s (Q): %s" % [d.name, d.passive, d.ability, d.ability_text]
+	_hero_info.text = "%s\n%s (Q): %s" % [d.passive, d.ability, d.ability_text]
 
 
 func _save_settings() -> void:
@@ -258,6 +288,17 @@ func _auto_place(spec: String) -> void:
 		await get_tree().create_timer(0.25).timeout
 		w.place_tower(c, parts[1] if parts.size() > 1 else "hedge_block")
 		await get_tree().create_timer(0.2).timeout
+	if _auto.has("select"):
+		var sxy := String(_auto.select).split(",")
+		w.selected_cell = Vector2i(int(sxy[0]), int(sxy[1]))
+		w.hud.refresh()
+	if _auto.has("cam"):
+		var cv := String(_auto.cam).split(",")
+		w.view.camera.position = Vector3(float(cv[0]), float(cv[1]), float(cv[2]))
+		w.view.camera.look_at(Vector3(0, -0.6, float(cv[3]) if cv.size() > 3 else 0.0))
+	if _auto.has("preview-results"):
+		w.hud.preview_results = true
+		w.hud.refresh()
 	if _auto.has("upgrade"):
 		await get_tree().create_timer(0.5).timeout
 		for item in String(_auto.upgrade).split("|"):
@@ -286,3 +327,9 @@ func _auto_ready(w: Node) -> void:
 					w.upgrade_selected()
 					await get_tree().create_timer(0.2).timeout
 			w.toggle_ready()
+
+
+func _take_shot() -> void:
+	var img := get_viewport().get_texture().get_image()
+	img.save_png(String(_auto.shot))
+	print("[shot] saved ", _auto.shot)

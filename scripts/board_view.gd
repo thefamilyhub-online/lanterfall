@@ -4,6 +4,7 @@ extends Node3D
 ## shapes when a model file is missing, so the game always runs.
 
 const D := preload("res://scripts/data.gd")
+const GladeDecor := preload("res://scripts/glade_decor.gd")
 
 const SNUFFER_COLORS := {
 	"scamper": Color("#7B5BD6"), "shellback": Color("#5E7FA6"),
@@ -98,7 +99,7 @@ func _build_environment() -> void:
 	var env := WorldEnvironment.new()
 	var e := Environment.new()
 	e.background_mode = Environment.BG_COLOR
-	e.background_color = Color("#1B1638")
+	e.background_color = Color("#6FB26A")
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	e.ambient_light_color = Color("#B9A8E8")
 	e.ambient_light_energy = 0.55
@@ -124,24 +125,10 @@ func _build_environment() -> void:
 
 
 func _build_board() -> void:
-	var base := BoxMesh.new()
-	base.size = Vector3(world.W + 1.2, 0.5, world.H + 1.2)
-	add_child(mesh_node(base, mat(Color("#7A4E6E")), Vector3(0, -0.35, 0)))
-	var tile := BoxMesh.new()
-	tile.size = Vector3(0.96, 0.12, 0.96)
-	var a := mat(Color("#A8E0BC"))
-	var b := mat(Color("#97D3AC"))
-	for x in world.W:
-		for y in world.H:
-			add_child(mesh_node(tile, a if (x + y) % 2 == 0 else b, world.cell_to_world(Vector2i(x, y)) + Vector3(0, -0.06, 0)))
-	var pool := CylinderMesh.new()
-	pool.top_radius = 0.5
-	pool.bottom_radius = 0.5
-	pool.height = 0.04
-	for s in D.MAP.syrup:
-		var n := mesh_node(pool, mat(Color("#E39A2E"), 0.35, 0.85), world.cell_to_world(s) + Vector3(0, 0.02, 0))
-		n.scale = Vector3(1.04, 1, 1.04)
-		add_child(n)
+	var decor := GladeDecor.new()
+	decor.name = "GladeDecor"
+	add_child(decor)
+	decor.build(self)
 	var colors := [Color("#F27BAA"), Color("#FFD34D"), Color("#7FC8F0"), Color("#B48CF2")]
 	var i := 0
 	for r in D.MAP.rocks:
@@ -163,7 +150,7 @@ func _build_board() -> void:
 			stick.height = 1.6
 			tree.add_child(mesh_node(stick, mat(Color("#F7F2E8")), Vector3(0, 0.8, 0)))
 			tree.add_child(mesh_node(sphere(0.6), mat(colors[i % colors.size()]), Vector3(0, 1.8, 0)))
-		tree.position = Vector3(t.x - world.W / 2.0, -0.1, t.y - world.H / 2.0)
+		tree.position = Vector3(t.x - world.W / 2.0, -0.65, t.y - world.H / 2.0)
 		tree.scale = Vector3.ONE * 1.3
 		add_child(tree)
 		i += 1
