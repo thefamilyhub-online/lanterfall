@@ -166,6 +166,12 @@ func _build_ui() -> void:
 	_status.custom_minimum_size = Vector2(380, 0)
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
+	var sound := UI.panel(left, "SoftPanel")
+	var sv := VBoxContainer.new()
+	sound.add_child(sv)
+	Sfx.make_sliders(sv)
+	Sfx.music("music_menu")
+
 	var ver := UI.label(left, "Version %s" % Net.GAME_VERSION, 14, Color("#6E78A8"))
 	ver.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
@@ -254,6 +260,7 @@ func _on_login_finished(ok: bool, message: String) -> void:
 
 
 func _on_connection_lost(message: String) -> void:
+	Sfx.music("music_menu")
 	var w := get_tree().root.get_node_or_null("World")
 	if w:
 		w.queue_free()

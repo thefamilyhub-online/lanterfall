@@ -127,6 +127,23 @@ static func theme() -> Theme:
 	t.set_color("font_placeholder_color", "LineEdit", Color("#6E78A8"))
 	t.set_color("caret_color", "LineEdit", GOLD)
 	t.set_font_size("font_size", "LineEdit", 20)
+	# ---- sliders (volume)
+	var track := StyleBoxFlat.new()
+	track.bg_color = Color("#0E1230")
+	track.border_color = Color("#4D58A8")
+	track.set_border_width_all(2)
+	track.set_corner_radius_all(8)
+	track.content_margin_top = 5
+	track.content_margin_bottom = 5
+	var fill := track.duplicate() as StyleBoxFlat
+	fill.bg_color = GOLD
+	fill.border_color = Color("#C9711F")
+	t.set_stylebox("slider", "HSlider", track)
+	t.set_stylebox("grabber_area", "HSlider", fill)
+	t.set_stylebox("grabber_area_highlight", "HSlider", fill)
+	var knob := tex("badge")
+	t.set_icon("grabber", "HSlider", knob)
+	t.set_icon("grabber_highlight", "HSlider", knob)
 	_theme = t
 	return t
 
