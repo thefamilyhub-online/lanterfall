@@ -9,3 +9,6 @@
 
 # Textures Godot extracts from the .glb models on import
 assets/towers/*_albedo.png*
+
+# Textures Godot extracts from any .glb on import
+assets/**/*_albedo.png*

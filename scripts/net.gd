@@ -15,6 +15,7 @@ signal player_logged_in(peer_id: int)
 
 var is_dedicated := false
 var my_name := ""
+var my_hero := "bramble"
 var players: Dictionary = {}  # peer_id (int) -> display name (String)
 
 var _pending := {}
