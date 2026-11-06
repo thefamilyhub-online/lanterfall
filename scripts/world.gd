@@ -247,7 +247,7 @@ func _join_as(player_name: String, hero: String) -> void:
 		coins[player_name] = D.START_COINS
 		rush[player_name] = 0
 		hero_cd[player_name] = 0.0
-		gift_allow[player_name] = int(D.START_COINS / 2)
+		gift_allow[player_name] = D.START_COINS >> 1
 	hero_choice[player_name] = hero if D.HEROES.has(hero) else "bramble"
 	if not hero_pos.has(player_name):
 		hero_pos[player_name] = _cell_center2(D.MAP.pip) + Vector2(-4, randf_range(-2, 2))
@@ -371,7 +371,7 @@ func _start_wave(early: bool) -> void:
 	_kills_this_wave = 0
 	_leaks_this_wave = 0
 	for n in coins:
-		gift_allow[n] = int(coins[n] / 2)
+		gift_allow[n] = int(coins[n]) >> 1
 	var wave_rng := RandomNumberGenerator.new()
 	wave_rng.seed = _rng.randi()
 	var list := D.wave_list(wave, wave_rng)
@@ -429,7 +429,7 @@ func _reset_match(text: String) -> void:
 		coins[n] = D.START_COINS
 		rush[n] = 0
 		hero_cd[n] = 0.0
-		gift_allow[n] = int(D.START_COINS / 2)
+		gift_allow[n] = D.START_COINS >> 1
 	_broadcast(&"full_state", [_full_state()])
 	_announce(text if text != "" else "A new match begins. Build your defenses!")
 

@@ -52,12 +52,12 @@ func setup(w: Node) -> void:
 	gr.add_child(_glow_bar)
 
 	# top-right: coins and team
-	var tr := _panel_box(root, Control.PRESET_TOP_RIGHT, Vector2(-16, 16))
-	_coins_label = _label(tr, "", 26, Color("#FFD34D"))
+	var top_right := _panel_box(root, Control.PRESET_TOP_RIGHT, Vector2(-16, 16))
+	_coins_label = _label(top_right, "", 26, Color("#FFD34D"))
 	_coins_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_label(tr, "Team", 14, Color("#B9A8E8"))
+	_label(top_right, "Team", 14, Color("#B9A8E8"))
 	_team_box = VBoxContainer.new()
-	tr.add_child(_team_box)
+	top_right.add_child(_team_box)
 
 	# bottom bar
 	var bottom := VBoxContainer.new()
@@ -136,13 +136,13 @@ func _box_style() -> StyleBoxFlat:
 	return s
 
 
-func _panel_box(root: Control, preset: int, offset: Vector2) -> VBoxContainer:
+func _panel_box(root: Control, preset: int, at: Vector2) -> VBoxContainer:
 	var p := PanelContainer.new()
 	p.add_theme_stylebox_override("panel", _box_style())
 	p.set_anchors_preset(preset)
 	if preset == Control.PRESET_TOP_RIGHT:
 		p.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	p.position = offset
+	p.position = at
 	root.add_child(p)
 	var v := VBoxContainer.new()
 	p.add_child(v)

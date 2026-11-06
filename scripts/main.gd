@@ -66,43 +66,39 @@ func _build_ui() -> void:
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(center)
 
+	# two columns so everything fits in a small window: brand + hero | sign-in
+	var cols := HBoxContainer.new()
+	cols.add_theme_constant_override("separation", 40)
+	center.add_child(cols)
+	var left := VBoxContainer.new()
+	left.custom_minimum_size = Vector2(390, 0)
+	left.add_theme_constant_override("separation", 8)
+	cols.add_child(left)
 	var box := VBoxContainer.new()
-	box.custom_minimum_size = Vector2(380, 0)
-	box.add_theme_constant_override("separation", 10)
-	center.add_child(box)
+	box.custom_minimum_size = Vector2(360, 0)
+	box.add_theme_constant_override("separation", 6)
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	cols.add_child(box)
 
 	var icon := TextureRect.new()
 	icon.texture = load("res://icon.svg")
-	icon.custom_minimum_size = Vector2(120, 120)
+	icon.custom_minimum_size = Vector2(96, 96)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	box.add_child(icon)
+	left.add_child(icon)
 
 	var title := Label.new()
 	title.text = "LANTERNFALL"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 40)
 	title.add_theme_color_override("font_color", Color("#FFC44D"))
-	box.add_child(title)
+	left.add_child(title)
 
 	var cfg := ConfigFile.new()
 	cfg.load(SETTINGS_PATH)
 
-	_address = _field(box, "Server address", cfg.get_value("join", "address", "127.0.0.1"))
-	_address.name = "AddressEdit"
-	_port = SpinBox.new()
-	_port.min_value = 1024
-	_port.max_value = 65535
-	_port.value = cfg.get_value("join", "port", Net.DEFAULT_PORT)
-	_labelled(box, "Port", _port)
-	_name = _field(box, "Your name", cfg.get_value("join", "name", ""))
-	_name.name = "NameEdit"
-	_name.placeholder_text = "e.g. Cade"
-	_pin = _field(box, "PIN (4–6 digits)", "")
-	_pin.name = "PinEdit"
-
-	_labelled(box, "Choose your hero", HBoxContainer.new())
-	var heroes := box.get_child(box.get_child_count() - 1) as HBoxContainer
+	_labelled(left, "Choose your hero", HBoxContainer.new())
+	var heroes := left.get_child(left.get_child_count() - 1) as HBoxContainer
 	heroes.add_theme_constant_override("separation", 8)
 	for h in D.HERO_ORDER:
 		var hb := Button.new()
@@ -116,25 +112,41 @@ func _build_ui() -> void:
 		_hero_buttons[h] = hb
 	_hero_info = Label.new()
 	_hero_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_hero_info.custom_minimum_size = Vector2(390, 0)
 	_hero_info.add_theme_color_override("font_color", Color("#D9D2F2"))
-	box.add_child(_hero_info)
+	left.add_child(_hero_info)
 	_pick_hero(cfg.get_value("join", "hero", Net.my_hero))
+
+	_address = _field(box, "Server address", cfg.get_value("join", "address", "127.0.0.1"))
+	_address.name = "AddressEdit"
+	_port = SpinBox.new()
+	_port.min_value = 1024
+	_port.max_value = 65535
+	_port.value = cfg.get_value("join", "port", Net.DEFAULT_PORT)
+	_labelled(box, "Port", _port)
+	_name = _field(box, "Your name", cfg.get_value("join", "name", ""))
+	_name.name = "NameEdit"
+	_name.placeholder_text = "e.g. Cade"
+	_pin = _field(box, "PIN (4–6 digits)", "")
+	_pin.name = "PinEdit"
 	_pin.secret = true
 	_pin.max_length = 6
 
 	var join := Button.new()
 	join.text = "Join game"
-	join.custom_minimum_size.y = 48
+	join.custom_minimum_size.y = 46
 	join.pressed.connect(_on_join)
 	box.add_child(join)
 	var host := Button.new()
 	host.text = "Host & play on this computer"
+	host.custom_minimum_size.y = 40
 	host.pressed.connect(_on_host)
 	box.add_child(host)
 	_buttons = [join, host]
 
 	_status = Label.new()
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_status.custom_minimum_size = Vector2(360, 0)
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_status.add_theme_color_override("font_color", Color("#B9C2DA"))
 	box.add_child(_status)
@@ -143,7 +155,7 @@ func _build_ui() -> void:
 	ver.text = "Version %s" % Net.GAME_VERSION
 	ver.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ver.add_theme_color_override("font_color", Color("#5E6B8C"))
-	box.add_child(ver)
+	left.add_child(ver)
 
 
 func _field(parent: Node, label: String, value: String) -> LineEdit:
