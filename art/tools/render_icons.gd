@@ -5,11 +5,9 @@ extends SceneTree
 ## (art/ is hidden from the game by .gdignore, so copy this file next to the
 ## project root first or run it with an absolute path.)
 
-const ITEMS := {
-	"pebble_popper": "res://assets/towers/pebble_popper.glb",
-	"jelly_lobber": "res://assets/towers/jelly_lobber.glb",
-	"frost_puff": "res://assets/towers/frost_puff.glb",
-	"hedge_block": "res://assets/towers/hedge_block.glb",
+const D := preload("res://scripts/data.gd")
+const Shapes := preload("res://scripts/shapes.gd")
+var ITEMS := {
 	"bramble": "res://assets/heroes/bramble.glb",
 	"glint": "res://assets/heroes/glint.glb",
 	"pip": "res://assets/pip/pip.glb",
@@ -17,6 +15,10 @@ const ITEMS := {
 
 
 func _initialize() -> void:
+	for t in D.TOWER_ORDER:
+		ITEMS[t] = "res://assets/towers/%s.glb" % t
+	for t in ["splitblob", "shade", "mender", "bubbleguard", "jammer", "sugar_snuffer"]:
+		ITEMS["snuffer_" + t] = "shape:" + t
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://assets/ui/icons"))
 	_run.call_deferred()
 
@@ -54,8 +56,14 @@ func _render(id: String, path: String) -> void:
 	rim.light_energy = 0.6
 	rim.light_color = Color("#9FD3FF")
 	vp.add_child(rim)
-	var scene: PackedScene = load(path)
-	var m: Node3D = scene.instantiate()
+	var m: Node3D
+	if path.begins_with("shape:"):
+		m = Shapes.snuffer(path.substr(6))
+		m.rotation.y = PI
+	elif ResourceLoader.exists(path):
+		m = (load(path) as PackedScene).instantiate()
+	else:
+		m = Shapes.tower(id)
 	vp.add_child(m)
 	# frame the model's bounds
 	var aabb := _bounds(m)

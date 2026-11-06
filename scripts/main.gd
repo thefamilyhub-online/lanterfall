@@ -283,7 +283,7 @@ func _auto_place(spec: String) -> void:
 	var w := get_tree().root.get_node_or_null("World")
 	if w == null:
 		return
-	if _auto.has("ready"):
+	if spec == "" and _auto.has("ready"):
 		_auto_ready(w)
 	if spec == "":
 		return
@@ -295,6 +295,8 @@ func _auto_place(spec: String) -> void:
 		await get_tree().create_timer(0.25).timeout
 		w.place_tower(c, parts[1] if parts.size() > 1 else "hedge_block")
 		await get_tree().create_timer(0.2).timeout
+	if _auto.has("ready") and not _auto.has("upgrade"):
+		_auto_ready(w)
 	if _auto.has("select"):
 		var sxy := String(_auto.select).split(",")
 		w.selected_cell = Vector2i(int(sxy[0]), int(sxy[1]))
@@ -319,6 +321,8 @@ func _auto_place(spec: String) -> void:
 			w.selected_cell = c
 			w.upgrade_selected()
 			await get_tree().create_timer(0.2).timeout
+		if _auto.has("ready"):
+			_auto_ready(w)
 
 
 ## Test helper: press Ready whenever a build phase starts, and keep spending

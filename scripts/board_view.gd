@@ -5,6 +5,7 @@ extends Node3D
 
 const D := preload("res://scripts/data.gd")
 const GladeDecor := preload("res://scripts/glade_decor.gd")
+const Shapes := preload("res://scripts/shapes.gd")
 
 const SNUFFER_COLORS := {
 	"scamper": Color("#7B5BD6"), "shellback": Color("#5E7FA6"),
@@ -262,6 +263,8 @@ func add_tower(c: Vector2i) -> void:
 	root.position = world.cell_to_world(c)
 	var m := model("res://assets/towers/%s.glb" % t.type)
 	if m == null:
+		m = Shapes.tower(t.type)
+	if m == null:
 		var box := BoxMesh.new()
 		box.size = Vector3(0.8, 0.8, 0.8)
 		m = mesh_node(box, mat(Color("#888888")), Vector3(0, 0.4, 0))
@@ -283,6 +286,15 @@ func add_tower(c: Vector2i) -> void:
 	spark.name = "Overcharge"
 	spark.visible = false
 	root.add_child(spark)
+	var jam := Node3D.new()
+	jam.name = "Jam"
+	jam.visible = false
+	for k in 3:
+		var bolt := mesh_node(BoxMesh.new(), mat(Color("#FFB627"), 3.0), Vector3(cos(k * 2.1) * 0.3, 1.35 + k * 0.05, sin(k * 2.1) * 0.3))
+		bolt.scale = Vector3(0.05, 0.22, 0.05)
+		bolt.rotation.z = 0.6 * (1 if k % 2 == 0 else -1)
+		jam.add_child(bolt)
+	root.add_child(jam)
 	add_child(root)
 	_tower_nodes[c] = root
 	update_tower(c)
@@ -313,6 +325,7 @@ func refresh_overcharge() -> void:
 	for c in _tower_nodes:
 		if world.towers.has(c):
 			_tower_nodes[c].get_node("Overcharge").visible = world.towers[c].oc > 0.0
+			_tower_nodes[c].get_node("Jam").visible = world.towers[c].get("jam", 0.0) > 0.0
 
 
 func refresh_links() -> void:
@@ -355,8 +368,10 @@ func _make_snuffer(type: String) -> Dictionary:
 	var path := "res://assets/snuffers/%s.glb" % ("shellback" if type == "big_shellback" else type)
 	var m := model(path)
 	if m == null:
+		m = Shapes.snuffer(type)
+	if m == null:
 		m = Node3D.new()
-		m.add_child(mesh_node(sphere(0.26), mat(SNUFFER_COLORS[type]), Vector3(0, 0.26, 0)))
+		m.add_child(mesh_node(sphere(0.26), mat(SNUFFER_COLORS.get(type, Color("#7B5BD6"))), Vector3(0, 0.26, 0)))
 		for side in [-1, 1]:
 			m.add_child(mesh_node(sphere(0.06), mat(Color("#FFF3D6"), 0.5), Vector3(0.1 * side, 0.34, -0.22)))
 		if d.air:
@@ -391,9 +406,16 @@ func _make_snuffer(type: String) -> Dictionary:
 	var ice := mesh_node(ice_box, mat(Color("#D9F6FF"), 0.6, 0.45), Vector3(0, 0.3 * d.size, 0))
 	ice.visible = false
 	root.add_child(ice)
+	var bubble := mesh_node(sphere(0.42 * d.size), mat(Color("#BFEFFF"), 0.6, 0.35), Vector3(0, 0.3 * d.size, 0))
+	bubble.visible = false
+	root.add_child(bubble)
+	var honey := mesh_node(ring(0.3 * d.size, 0.08), mat(Color("#F2A33D"), 0.4, 0.85), Vector3(0, 0.05, 0))
+	honey.visible = false
+	root.add_child(honey)
 	add_child(root)
 	return {node = root, body = body_root, target = Vector3.ZERO, type = type, bg = bar_bg, fg = bar_fg,
-		ring = ring_n, ice = ice, wings = wings, air = d.air, phase = randf() * TAU}
+		ring = ring_n, ice = ice, wings = wings, air = d.air, phase = randf() * TAU,
+		bubble = bubble, honey = honey, hidden = false}
 
 
 func _quad(w: float, h: float) -> QuadMesh:
@@ -421,18 +443,25 @@ func apply_snapshot(ids: PackedInt32Array, pos: PackedVector2Array, types: Packe
 		(s.fg.material_override as StandardMaterial3D).albedo_color = Color("#7BE07B") if r > 0.5 else (Color("#FFD34D") if r > 0.25 else Color("#FF7A7A"))
 		s.ring.visible = (status[i] & 1) != 0
 		s.ice.visible = (status[i] & 2) != 0
+		s.bubble.visible = (status[i] & 4) != 0
+		s.honey.visible = (status[i] & 16) != 0
+		var hidden := (status[i] & 8) != 0
+		if hidden != s.hidden:
+			s.hidden = hidden
+			_set_ghost(s.body, 0.75 if hidden else 0.0)
+			s.bg.visible = s.bg.visible and not hidden
+			s.fg.visible = s.fg.visible and not hidden
 	for id in _snuffers.keys():
 		if not seen.has(id):
 			_snuffers[id].node.queue_free()
 			_snuffers.erase(id)
 	for shot in shots:
 		_play_shot(shot[0], shot[1], shot[2])
-		match int(shot[2]):
-			0: Sfx.play("shot_pebble")
-			1:
-				Sfx.play("shot_jelly")
-				Sfx.play_later("splat", 0.42)
-			2: Sfx.play("shot_frost")
+		var snd: String = ["shot_pebble", "shot_jelly", "shot_frost", "shot_seed", "beam", "drum", "swarm", "honey",
+			"bounce", "shield_pop", "split", "shield_up", "jam"][clampi(int(shot[2]), 0, 12)]
+		Sfx.play(snd)
+		if int(shot[2]) == 1:
+			Sfx.play_later("splat", 0.42)
 	for p in pops:
 		_confetti(Vector3(p.x, 0.4, p.y))
 		Sfx.play("snuffer_pop")
@@ -494,6 +523,8 @@ func _make_hero(player_name: String, hero: String) -> Dictionary:
 func _play_shot(c: Vector2i, to: Vector2, kind: int) -> void:
 	var from: Vector3 = world.cell_to_world(c) + Vector3(0, 1.0, 0)
 	var dest := Vector3(to.x, 0.35, to.y)
+	if c == Vector2i(-1, -1):
+		from = dest
 	match kind:
 		0:
 			var p := mesh_node(sphere(0.07), mat(Color("#FFC44D"), 3.0), from)
@@ -509,6 +540,87 @@ func _play_shot(c: Vector2i, to: Vector2, kind: int) -> void:
 			tw.tween_callback(_jelly_land.bind(blob, dest))
 		2:
 			_ripple(world.cell_to_world(c) + Vector3(0, 0.15, 0), world.tower_range(c) if world.towers.has(c) else 2.2, Color("#A8E6FF"))
+
+
+		3:
+			var seed := mesh_node(sphere(0.08), mat(Color("#FFE680"), 4.0), from)
+			add_child(seed)
+			var trail := mesh_node(CylinderMesh.new(), mat(Color("#FFE680"), 3.0, 0.5, true), from)
+			(trail.mesh as CylinderMesh).top_radius = 0.025
+			(trail.mesh as CylinderMesh).bottom_radius = 0.025
+			(trail.mesh as CylinderMesh).height = 1.0
+			add_child(trail)
+			var tw := create_tween()
+			tw.tween_method(_seed_step.bind(seed, trail, from, dest), 0.0, 1.0, 0.28)
+			tw.tween_callback(seed.queue_free)
+			tw.tween_callback(trail.queue_free)
+		4:
+			var a2 := from + Vector3(0, 0.1, 0)
+			var beam := mesh_node(CylinderMesh.new(), mat(Color("#FFF0A0"), 5.0, 0.8, true), (a2 + dest) / 2.0)
+			(beam.mesh as CylinderMesh).top_radius = 0.05
+			(beam.mesh as CylinderMesh).bottom_radius = 0.05
+			(beam.mesh as CylinderMesh).height = maxf(a2.distance_to(dest), 0.01)
+			beam.quaternion = Quaternion(Vector3.UP, (dest - a2).normalized())
+			add_child(beam)
+			var tw2 := create_tween()
+			tw2.tween_property(beam, "scale", Vector3(0.2, 1, 0.2), 0.16)
+			tw2.tween_callback(beam.queue_free)
+		5:
+			var r2: float = world.tower_range(c) if world.towers.has(c) else 2.0
+			_ripple(world.cell_to_world(c) + Vector3(0, 0.15, 0), r2, Color("#FF8A3D"))
+			_ripple(world.cell_to_world(c) + Vector3(0, 0.15, 0), r2 * 0.6, Color("#FFD34D"))
+		6:
+			var bug := mesh_node(sphere(0.05), mat(Color("#E8FF6A"), 5.0), from)
+			add_child(bug)
+			var side := Vector3(randf_range(-0.6, 0.6), randf_range(0.2, 0.6), randf_range(-0.6, 0.6))
+			var tw3 := create_tween()
+			tw3.tween_method(func(t: float): bug.position = from.lerp(dest, t) + side * sin(t * PI), 0.0, 1.0, 0.3)
+			tw3.tween_callback(bug.queue_free)
+		7:
+			var glob := mesh_node(sphere(0.12), mat(Color("#F2A33D"), 1.0), from)
+			add_child(glob)
+			var tw4 := create_tween()
+			tw4.tween_method(func(t: float): glob.position = from.lerp(dest, t) + Vector3(0, sin(t * PI) * 1.2, 0), 0.0, 1.0, 0.35)
+			tw4.tween_callback(_honey_land.bind(glob, dest))
+		8:
+			_ripple(world.cell_to_world(c) + Vector3(0, 0.2, 0), 1.4, Color("#FF6FA5"))
+			if _tower_nodes.has(c):
+				var spring := _tower_nodes[c].find_child("Spring", true, false) as Node3D
+				if spring:
+					var tw5 := create_tween()
+					tw5.tween_property(spring, "scale", Vector3(1, 1.5, 1), 0.08)
+					tw5.tween_property(spring, "scale", Vector3.ONE, 0.25).set_trans(Tween.TRANS_BACK)
+		9:
+			_ripple(dest, 0.6, Color("#BFEFFF"))
+		10:
+			_ripple(dest, 0.9, Color("#6FD36F"))
+			_confetti(dest)
+		11:
+			_ripple(dest, 1.6, Color("#5EC8FF"))
+		12:
+			if _tower_nodes.has(c):
+				_ripple(world.cell_to_world(c) + Vector3(0, 0.3, 0), 0.7, Color("#FFB627"))
+
+
+func _seed_step(t: float, seed: Node3D, trail: Node3D, from: Vector3, dest: Vector3) -> void:
+	seed.position = from.lerp(dest, t)
+	var a := from.lerp(dest, maxf(0.0, t - 0.25))
+	trail.position = (a + seed.position) / 2.0
+	var dv := seed.position - a
+	if dv.length() > 0.01:
+		trail.quaternion = Quaternion(Vector3.UP, dv.normalized())
+	trail.scale = Vector3(1, maxf(dv.length(), 0.01), 1)
+
+
+func _honey_land(glob: Node3D, dest: Vector3) -> void:
+	glob.queue_free()
+	_ripple(dest, 1.1, Color("#F2A33D"))
+
+
+## Fades a Snuffer's body (Shades are see-through until revealed).
+func _set_ghost(body: Node3D, amount: float) -> void:
+	for n in body.find_children("*", "GeometryInstance3D", true, false):
+		(n as GeometryInstance3D).transparency = amount
 
 
 func _jelly_land(blob: Node3D, dest: Vector3) -> void:
@@ -610,6 +722,13 @@ func update_frame(delta: float) -> void:
 	var gr: float = world.glow_radius()
 	_glow_ring.scale = Vector3(gr, 1, gr)
 	for c in _tower_nodes:
+		var bugs := _tower_nodes[c].find_child("Bugs", true, false) as Node3D
+		if bugs:
+			bugs.rotation.y += delta * 1.5
+			bugs.position.y = sin(_time * 3.0 + c.x) * 0.03
+		var jm: Node3D = _tower_nodes[c].get_node("Jam")
+		if jm.visible:
+			jm.rotation.y += delta * 9.0
 		var sp: Node3D = _tower_nodes[c].get_node("Overcharge")
 		if sp.visible:
 			sp.rotation.y += delta * 4.0
