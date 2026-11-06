@@ -1,0 +1,15 @@
+services:
+  lanternfall:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    container_name: lanternfall-server
+    restart: unless-stopped
+    ports:
+      - "7777:7777/udp"
+    volumes:
+      # Accounts and saved progress live in this named volume and survive rebuilds.
+      - lanternfall-data:/data
+
+volumes:
+  lanternfall-data:

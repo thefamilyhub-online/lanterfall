@@ -1,0 +1,7 @@
+.git
+.godot
+art
+docs
+export
+server/data
+*.blend
