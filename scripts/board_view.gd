@@ -427,8 +427,17 @@ func apply_snapshot(ids: PackedInt32Array, pos: PackedVector2Array, types: Packe
 			_snuffers.erase(id)
 	for shot in shots:
 		_play_shot(shot[0], shot[1], shot[2])
+		match int(shot[2]):
+			0: Sfx.play("shot_pebble")
+			1:
+				Sfx.play("shot_jelly")
+				Sfx.play_later("splat", 0.42)
+			2: Sfx.play("shot_frost")
 	for p in pops:
 		_confetti(Vector3(p.x, 0.4, p.y))
+		Sfx.play("snuffer_pop")
+	if pops.size() > 0:
+		Sfx.play("coin", -8.0)
 
 
 # ================================================================ heroes

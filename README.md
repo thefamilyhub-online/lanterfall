@@ -75,14 +75,17 @@ Then open **UDP 7777** in the VPS firewall. Players join with the server's addre
 | `scripts/board_view.gd` | Everything you see on the board |
 | `scripts/glade_decor.gd` | Gumdrop Glade scenery: grass tiles, cake edge, syrup, meadow, river, props |
 | `scripts/hud.gd` | In-game HUD and results screen |
+| `scripts/audio.gd` | Music and sound effects (autoload `Sfx`), volume sliders |
 | `scripts/ui_theme.gd` | The Lanternfall look: buttons, panels, ribbon, fonts |
 | `scripts/card_button.gd` | Lantern-glow cards for tower and hero picks |
 | `assets/` | Models used by the game (textures baked in) |
-| `art/` | Blender source files, renders, `art/tools/lanternfall_models.py`, and `art/tools/make_ui.py` (draws the UI pieces) — ignored by Godot |
+| `art/` | Blender source files, renders, `art/tools/lanternfall_models.py`, `art/tools/make_ui.py` (draws the UI pieces) and `art/tools/make_audio.py` (synthesizes all music and sounds) — ignored by Godot |
 | `server/` | Dockerfile and compose file for the dedicated server |
 
 ## Credits
 
 Design and code: the Lanternfall family team. UI layout ideas loosely inspired by community game-UI kits; all UI art is drawn by `art/tools/make_ui.py`.
+
+Music and sound effects: synthesized from scratch by `art/tools/make_audio.py` (original, no third-party audio).
 
 Fonts: [Lilita One](https://fonts.google.com/specimen/Lilita+One) and [Fredoka](https://fonts.google.com/specimen/Fredoka), both under the SIL Open Font License (see `assets/fonts/`). Some future assets may come from the KayKit collections by Kay Lousberg (CC0).

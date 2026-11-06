@@ -40,6 +40,7 @@ var _results_stats: HBoxContainer
 var _results_team: GridContainer
 var _results_timer: Label
 var _results_sig := ""
+var _sound_panel: PanelContainer
 
 
 func setup(w: Node) -> void:
@@ -96,14 +97,25 @@ func _build_top_right(root: Control) -> void:
 	col.add_theme_constant_override("separation", 8)
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(col)
-	var pill := UI.panel(col, "Pill")
-	pill.size_flags_horizontal = Control.SIZE_SHRINK_END
+	var top := HBoxContainer.new()
+	top.size_flags_horizontal = Control.SIZE_SHRINK_END
+	top.add_theme_constant_override("separation", 8)
+	col.add_child(top)
+	var snd := UI.button(top, "Sound", "PurpleButton", func(): _sound_panel.visible = not _sound_panel.visible, Vector2(92, 48))
+	snd.add_theme_font_size_override("font_size", 16)
+	var pill := UI.panel(top, "Pill")
 	var pr := HBoxContainer.new()
 	pr.add_theme_constant_override("separation", 8)
 	pill.add_child(pr)
 	UI.picture(pr, UI.tex("coin"), Vector2(36, 36))
 	_coins_label = UI.label(pr, "", 28, UI.GOLD, true, 6)
 	_coins_label.custom_minimum_size.x = 64
+	_sound_panel = UI.panel(col, "SoftPanel")
+	_sound_panel.custom_minimum_size.x = 320
+	var sv := VBoxContainer.new()
+	_sound_panel.add_child(sv)
+	Sfx.make_sliders(sv)
+	_sound_panel.visible = false
 	var team := UI.panel(col, "SoftPanel")
 	team.custom_minimum_size.x = 320
 	var tv := VBoxContainer.new()

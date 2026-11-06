@@ -867,6 +867,7 @@ func tower_placed(c: Vector2i, type: String, owner_name: String, tier: int, spen
 		recompute_combos()
 	if visual:
 		view.add_tower(c)
+		Sfx.play("build")
 		view.refresh_links()
 		view.refresh_paths()
 	print("[%s] sees %s's %s at %s" % [Net.my_name, owner_name, type, c])
@@ -880,11 +881,14 @@ func tower_changed(c: Vector2i, tier: int, spent: int) -> void:
 	if visual:
 		view.update_tower(c)
 		hud.refresh()
+		Sfx.play("upgrade")
 	print("[%s] sees tower at %s upgraded to tier %d" % [Net.my_name, c, tier])
 
 
 @rpc("authority", "reliable")
 func tower_removed(c: Vector2i) -> void:
+	if visual:
+		Sfx.play("sell")
 	if not multiplayer.is_server():
 		towers.erase(c)
 		astar.set_point_solid(c, false)
@@ -946,6 +950,11 @@ func announce(text: String) -> void:
 @rpc("authority", "reliable")
 func notice(text: String) -> void:
 	_show_message(text)
+	if visual:
+		if "sent" in text:
+			Sfx.play("gift")
+		elif not ("!" in text):
+			Sfx.play("denied")
 
 
 func _show_message(text: String) -> void:
@@ -1043,6 +1052,43 @@ func _process(delta: float) -> void:
 		if not multiplayer.is_server():
 			hero_moved.rpc_id(1, my_pos)
 	view.update_frame(delta)
+	_sound_watch()
+
+
+## Turns changes in the match into sounds and music (host and clients alike).
+var _snd := {}
+func _sound_watch() -> void:
+	var me: String = Net.my_name
+	var now := {phase = phase, wave = wave, glow = glow, cd = float(hero_cd.get(me, 0.0)),
+		gate = gate_closed_waves, ready = ready_names.has(me)}
+	if _snd.is_empty():
+		_snd = now
+		Sfx.music("music_battle")
+		return
+	if now.phase != _snd.phase:
+		match now.phase:
+			"wave":
+				Sfx.play("wave_start")
+				if wave == D.BOSS_WAVE:
+					Sfx.play_later("boss", 0.6)
+			"build":
+				if _snd.phase == "wave":
+					Sfx.play("wave_clear")
+			"victory":
+				Sfx.duck(3.0)
+				Sfx.play("victory")
+			"defeat":
+				Sfx.duck(3.0)
+				Sfx.play("defeat")
+	if now.glow < _snd.glow - 0.01 and now.phase == "wave":
+		Sfx.play("leak")
+	if now.cd > _snd.cd + 1.0:
+		Sfx.play("ability")
+	if now.gate > _snd.gate:
+		Sfx.play("gate")
+	if now.ready and not _snd.ready:
+		Sfx.play("ready")
+	_snd = now
 
 
 func _unhandled_input(event: InputEvent) -> void:
