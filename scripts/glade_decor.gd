@@ -14,6 +14,13 @@ var _rng := RandomNumberGenerator.new()
 var _hw: float   # half board width
 var _hh: float   # half board height
 var _blocked: Array[Rect2] = []   # meadow areas to keep clear (x/z)
+var _time := 0.0
+var _swayers: Array = []      # [node, phase, amount]
+var _bouncers: Array = []     # [node, phase, base_scale]
+var _lanterns: Array = []     # [material, light, phase]
+var _gate_lights: Array = []  # [light, phase]
+var _eyes: Array = []         # {node, next, shut}
+var _butterflies: Array = []  # {node, wings, center, rx, rz, speed, phase}
 
 # ---------------------------------------------------------------- shaders
 const NOISE := """
@@ -152,6 +159,60 @@ void fragment() {
 }
 """
 
+const WIND_SHADER := """
+shader_type spatial;
+uniform float amp = 0.08;
+uniform float rough = 0.8;
+void vertex() {
+	vec3 wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	float h = clamp(wp.y + 0.6, 0.0, 2.5);
+	float t = TIME;
+	vec3 off = vec3(sin(t * 1.7 + wp.x * 0.7 + wp.z * 0.5), 0.0, cos(t * 1.3 + wp.x * 0.4 - wp.z * 0.6) * 0.6) * amp * h * h;
+	VERTEX += (inverse(MODEL_MATRIX) * vec4(off, 0.0)).xyz;
+}
+void fragment() {
+	ALBEDO = COLOR.rgb;
+	ROUGHNESS = rough;
+}
+"""
+
+const HOLLOW_SHADER := """
+shader_type spatial;
+render_mode blend_mix, depth_draw_never, cull_disabled;
+%s
+void fragment() {
+	vec2 p = (UV - 0.5) * 2.0;
+	float n = noise(UV * 5.0 + vec2(TIME * 0.12, TIME * 0.07));
+	float n2 = noise(UV * 11.0 - vec2(TIME * 0.2, 0.0));
+	float d = length(p * vec2(1.0, 0.85)) + (n - 0.5) * 0.35;
+	float a = 1.0 - smoothstep(0.35, 0.95, d);
+	vec3 col = mix(vec3(0.16, 0.08, 0.27), vec3(0.40, 0.20, 0.58), n * 0.7 + n2 * 0.3);
+	ALBEDO = pow(col, vec3(2.2));
+	ALPHA = a * 0.94;
+	ROUGHNESS = 0.9;
+}
+"""
+
+const SWIRL_SHADER := """
+shader_type spatial;
+render_mode cull_disabled;
+uniform vec4 tint : source_color = vec4(0.56, 0.31, 0.84, 1.0);
+void fragment() {
+	vec2 p = (UV - 0.5) * 2.0;
+	float r = length(p);
+	if (r > 0.98) { discard; }
+	float a = atan(p.y, p.x) / 6.2832;
+	float band = step(0.5, fract(a + r * 2.6));
+	vec3 dark = vec3(0.07, 0.04, 0.10);
+	vec3 col = mix(dark, tint.rgb, band);
+	col = mix(col, dark, smoothstep(0.88, 0.94, r));
+	float shine = 1.0 - smoothstep(0.0, 0.2, length(p - vec2(-0.35, -0.35)));
+	ALBEDO = col + shine * 0.25;
+	ROUGHNESS = 0.2;
+	SPECULAR = 0.8;
+}
+"""
+
 const SPRINKLE_COLORS := [Color("#FF6FA5"), Color("#FFD34D"), Color("#6FD3FF"), Color("#9CF06F"), Color("#B48CF2"), Color("#FFFFFF")]
 const CANDY := [Color("#F27BAA"), Color("#FFD34D"), Color("#7FC8F0"), Color("#B48CF2"), Color("#FF9466")]
 
@@ -169,6 +230,7 @@ func build(v: Node3D) -> void:
 	_meadow()
 	_river()
 	_stepping_stones()
+	_snuffer_hollow()
 	_lantern_posts()
 	_candy_canes()
 	_mushrooms()
@@ -176,6 +238,8 @@ func build(v: Node3D) -> void:
 	_trees_and_gumdrops()
 	_cotton_candy()
 	_flowers_and_grass()
+	_fireflies()
+	_butterfly_flock()
 
 
 # ================================================================ helpers
@@ -208,7 +272,7 @@ func _std(c: Color, rough: float, emit := 0.0) -> StandardMaterial3D:
 	return m
 
 
-func _multi(mesh: Mesh, xforms: Array, colors: Array, rough := 0.6, cast_shadow := true) -> MultiMeshInstance3D:
+func _multi(mesh: Mesh, xforms: Array, colors: Array, rough := 0.6, cast_shadow := true, wind := 0.0) -> MultiMeshInstance3D:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_colors = true
@@ -219,10 +283,16 @@ func _multi(mesh: Mesh, xforms: Array, colors: Array, rough := 0.6, cast_shadow 
 		mm.set_instance_color(i, colors[i])
 	var mi := MultiMeshInstance3D.new()
 	mi.multimesh = mm
-	var m := StandardMaterial3D.new()
-	m.vertex_color_use_as_albedo = true
-	m.roughness = rough
-	mi.material_override = m
+	if wind > 0.0:
+		var wm := _shader(WIND_SHADER, false)
+		wm.set_shader_parameter("amp", wind)
+		wm.set_shader_parameter("rough", rough)
+		mi.material_override = wm
+	else:
+		var m := StandardMaterial3D.new()
+		m.vertex_color_use_as_albedo = true
+		m.roughness = rough
+		mi.material_override = m
 	if not cast_shadow:
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
@@ -467,8 +537,16 @@ func _lantern_posts() -> void:
 		add_child(root)
 		_mesh(pole, dark, Vector3(0, 0.55, 0), root)
 		_mesh(BoxMesh.new(), brass, Vector3(0, 1.22, 0), root).scale = Vector3(0.26, 0.04, 0.26)
-		_mesh(_sphere(0.15, 12), glass, Vector3(0, 1.37, 0), root).scale = Vector3(1, 1.15, 1)
+		var g := glass.duplicate() as StandardMaterial3D
+		_mesh(_sphere(0.15, 12), g, Vector3(0, 1.37, 0), root).scale = Vector3(1, 1.15, 1)
 		_mesh(cap, brass, Vector3(0, 1.6, 0), root)
+		var light := OmniLight3D.new()
+		light.light_color = Color("#FFC870")
+		light.omni_range = 2.6
+		light.light_energy = 1.2
+		light.position = Vector3(0, 1.37, 0)
+		root.add_child(light)
+		_lanterns.append([g, light, _rng.randf() * 10.0])
 
 
 func _candy_canes() -> void:
@@ -516,6 +594,7 @@ func _mushrooms() -> void:
 		root.scale = Vector3.ONE * s
 		root.rotation.y = _rng.randf() * TAU
 		add_child(root)
+		_bouncers.append([root, _rng.randf() * TAU, s])
 		_mesh(stem, cream, Vector3(0, 0.2, 0), root)
 		var capc: Color = [Color("#FF6F91"), Color("#FF8F6B"), Color("#B48CF2"), Color("#6FC3F0")][_rng.randi() % 4]
 		var cap := _mesh(_sphere(0.3, 16), _std(capc, 0.45), Vector3(0, 0.42, 0), root)
@@ -567,6 +646,7 @@ func _trees_and_gumdrops() -> void:
 		tree.scale = Vector3.ONE * _rng.randf_range(1.0, 1.6)
 		tree.rotation.y = _rng.randf() * TAU
 		add_child(tree)
+		_swayers.append([tree, _rng.randf() * TAU, 0.035])
 		_blocked.append(Rect2(p.x - 0.6, p.y - 0.6, 1.2, 1.2))
 	for n in 12:
 		var p := _spot(_random_area(), 0.4)
@@ -606,9 +686,9 @@ func _flowers_and_grass() -> void:
 			pcol.append(c)
 		centers.append(Transform3D(Basis(), base + Vector3(0, h + 0.015, 0)))
 		ccol.append(Color("#FFB627") if c != Color("#FFD34D") else Color("#FF7A3D"))
-	_multi(_cyl(0.012, 0.012, 0.2, 5), stems, scol, 0.8, false)
-	_multi(_sphere(0.045, 8), petals, pcol, 0.6, false)
-	_multi(_sphere(0.03, 8), centers, ccol, 0.6, false)
+	_multi(_cyl(0.012, 0.012, 0.2, 5), stems, scol, 0.8, false, 0.5)
+	_multi(_sphere(0.045, 8), petals, pcol, 0.6, false, 0.5)
+	_multi(_sphere(0.03, 8), centers, ccol, 0.6, false, 0.5)
 	# grass tufts
 	var blades: Array = []
 	var bcol: Array = []
@@ -622,7 +702,7 @@ func _flowers_and_grass() -> void:
 			var h := _rng.randf_range(0.6, 1.1)
 			blades.append(Transform3D(tilt.scaled(Vector3(1, h, 1)), Vector3(p.x, -0.6, p.y) + tilt * Vector3(0, 0.1 * h, 0)))
 			bcol.append(g)
-	_multi(_cyl(0.0, 0.035, 0.2, 4), blades, bcol, 0.9, false)
+	_multi(_cyl(0.0, 0.035, 0.2, 4), blades, bcol, 0.9, false, 0.9)
 
 
 func _cotton_candy() -> void:
@@ -645,5 +725,260 @@ func _cotton_candy() -> void:
 			puffs.append(Transform3D(Basis().scaled(Vector3.ONE * r), Vector3(p.x, -0.6 + h + 0.25, p.y) + off))
 			cols.append(c.lightened(_rng.randf_range(0.0, 0.15)))
 		_blocked.append(Rect2(p.x - 0.7, p.y - 0.7, 1.4, 1.4))
-	_multi(_cyl(0.05, 0.06, 0.2, 8), stems, scol, 0.6)
-	_multi(_sphere(0.3, 14), puffs, cols, 0.9)
+	_multi(_cyl(0.05, 0.06, 0.2, 8), stems, scol, 0.6, true, 0.025)
+	_multi(_sphere(0.3, 14), puffs, cols, 0.9, true, 0.025)
+
+
+# ================================================================ Snuffer Hollow
+## A creeping purple shadow where the Snuffers come from: licorice-swirl
+## trees, glowing mushrooms, mist rolling out of the gates and eyes that
+## blink in the dark bushes. Spooky, but friendly-spooky.
+func _snuffer_hollow() -> void:
+	var gates: Array[float] = []
+	for e in D.MAP.entrances:
+		gates.append((world.cell_to_world(e) as Vector3).z)
+	var patch := PlaneMesh.new()
+	patch.size = Vector2(17.0, world.H + 6.0)
+	_mesh(patch, _shader(HOLLOW_SHADER), Vector3(-_hw - 2.6, -0.595, 0))
+	for z in gates:
+		# purple glow that pulses at each gate
+		var light := OmniLight3D.new()
+		light.light_color = Color("#B57BFF")
+		light.omni_range = 3.2
+		light.light_energy = 1.6
+		light.position = Vector3(-_hw - 0.9, 0.7, z)
+		add_child(light)
+		_gate_lights.append([light, _rng.randf() * TAU])
+		_mist(Vector3(-_hw - 1.0, 0.1, z))
+	# keep the cheerful props out of the hollow
+	for z in gates:
+		pass
+	_blocked.append(Rect2(-_hw - 9.0, -_hh - 1.5, 8.6, world.H + 3.0))
+	# licorice swirl trees, glowing mushrooms and dark bushes with eyes
+	var lane_pad := 1.0
+	var spots: Array[Vector2] = []
+	for i in 40:
+		var p := Vector2(_rng.randf_range(-_hw - 7.5, -_hw - 1.2), _rng.randf_range(gates[0] - 2.4, gates[gates.size() - 1] + 2.4))
+		var ok := true
+		for z in gates:
+			if absf(p.y - z) < lane_pad:
+				ok = false
+		for q in spots:
+			if q.distance_to(p) < 1.3:
+				ok = false
+		if ok:
+			spots.append(p)
+	var k := 0
+	for p in spots:
+		match k % 3:
+			0: _licorice_tree(p)
+			1: _eye_bush(p)
+			2: _glow_shrooms(p)
+		k += 1
+
+
+func _licorice_tree(p: Vector2) -> void:
+	var root := Node3D.new()
+	root.position = Vector3(p.x, -0.6, p.y)
+	root.rotation.y = _rng.randf() * TAU
+	add_child(root)
+	var h := _rng.randf_range(1.2, 1.8)
+	_mesh(_cyl(0.05, 0.08, h, 8), _std(Color("#2A1B3A"), 0.5), Vector3(0, h / 2.0, 0), root)
+	# a flat licorice swirl on top
+	var disc := QuadMesh.new()
+	disc.size = Vector2(1.0, 1.0)
+	var sw := _shader(SWIRL_SHADER, false)
+	sw.set_shader_parameter("tint", [Color("#8E4FD6"), Color("#3FB8C9"), Color("#D64F9C")][_rng.randi() % 3])
+	var d := _mesh(disc, sw, Vector3(0, h + 0.45, 0), root)
+	d.rotation.y = -root.rotation.y + _rng.randf_range(-0.4, 0.4)
+	d.rotation.x = -0.35
+	_swayers.append([root, _rng.randf() * TAU, 0.05])
+
+
+func _eye_bush(p: Vector2) -> void:
+	var root := Node3D.new()
+	root.position = Vector3(p.x, -0.6, p.y)
+	add_child(root)
+	var dark := _std(Color("#3A2350"), 0.9)
+	for i in 5:
+		var b := _mesh(_sphere(0.32, 12), dark, Vector3(_rng.randf_range(-0.3, 0.3), 0.25 + _rng.randf_range(0.0, 0.2), _rng.randf_range(-0.25, 0.25)), root)
+		b.scale = Vector3.ONE * _rng.randf_range(0.8, 1.15)
+	# a pair of glowing eyes peeking out toward the board
+	var eyes := Node3D.new()
+	eyes.position = Vector3(0.22, 0.5, 0.3)
+	eyes.rotation.y = -PI / 4
+	root.add_child(eyes)
+	var glow := _std(Color("#E8FF6A"), 0.3, 4.0)
+	for s in [-1.0, 1.0]:
+		var e := _mesh(_sphere(0.085, 10), glow, Vector3(0.12, 0, s * 0.12), eyes)
+		e.scale = Vector3(0.6, 1.25, 1.0)
+	_eyes.append({node = eyes, next = _rng.randf_range(0.5, 4.0), shut = 0.0})
+
+
+func _glow_shrooms(p: Vector2) -> void:
+	for i in _rng.randi_range(2, 4):
+		var root := Node3D.new()
+		var s := _rng.randf_range(0.4, 0.8)
+		root.position = Vector3(p.x + _rng.randf_range(-0.4, 0.4), -0.6, p.y + _rng.randf_range(-0.4, 0.4))
+		root.scale = Vector3.ONE * s
+		add_child(root)
+		_mesh(_cyl(0.08, 0.1, 0.4, 8), _std(Color("#D9CBEA"), 0.7), Vector3(0, 0.2, 0), root)
+		var c: Color = [Color("#B36BFF"), Color("#6BE3FF"), Color("#FF6BD5")][_rng.randi() % 3]
+		var cap := _mesh(_sphere(0.26, 14), _std(c, 0.4, 1.6), Vector3(0, 0.42, 0), root)
+		cap.scale = Vector3(1, 0.5, 1)
+		_bouncers.append([root, _rng.randf() * TAU, s])
+
+
+func _mist(at: Vector3) -> void:
+	var p := CPUParticles3D.new()
+	p.position = at
+	p.amount = 30
+	p.lifetime = 3.5
+	p.preprocess = 3.5
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	p.emission_box_extents = Vector3(0.3, 0.1, 0.5)
+	p.direction = Vector3(1, 0.2, 0)
+	p.spread = 35.0
+	p.gravity = Vector3(0, 0.03, 0)
+	p.initial_velocity_min = 0.15
+	p.initial_velocity_max = 0.4
+	p.scale_amount_min = 0.6
+	p.scale_amount_max = 1.4
+	var curve := Curve.new()
+	curve.add_point(Vector2(0, 0.4))
+	curve.add_point(Vector2(0.5, 1.0))
+	curve.add_point(Vector2(1, 1.3))
+	p.scale_amount_curve = curve
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(0.7, 0.5, 1.0, 0.0))
+	ramp.add_point(0.25, Color(0.62, 0.42, 0.98, 0.7))
+	ramp.set_color(ramp.get_point_count() - 1, Color(0.5, 0.3, 0.9, 0.0))
+	p.color_ramp = ramp
+	var m := StandardMaterial3D.new()
+	m.vertex_color_use_as_albedo = true
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	var quad := QuadMesh.new()
+	quad.size = Vector2(1.1, 1.1)
+	var tex := GradientTexture2D.new()
+	var g := Gradient.new()
+	g.set_color(0, Color(1, 1, 1, 1))
+	g.set_color(1, Color(1, 1, 1, 0))
+	tex.gradient = g
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(1.0, 0.5)
+	m.albedo_texture = tex
+	quad.material = m
+	p.mesh = quad
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(p)
+
+
+# ================================================================ little life
+func _fireflies() -> void:
+	var areas := _meadow_areas()
+	for a in areas:
+		var p := CPUParticles3D.new()
+		p.position = Vector3(a.get_center().x, 0.2, a.get_center().y)
+		p.amount = int(a.get_area() / 6.0)
+		p.lifetime = 5.0
+		p.preprocess = 5.0
+		p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+		p.emission_box_extents = Vector3(a.size.x / 2.0, 0.4, a.size.y / 2.0)
+		p.direction = Vector3(0, 1, 0)
+		p.spread = 180.0
+		p.gravity = Vector3(0, 0.04, 0)
+		p.initial_velocity_min = 0.05
+		p.initial_velocity_max = 0.2
+		var ramp := Gradient.new()
+		ramp.set_color(0, Color(1, 0.9, 0.5, 0.0))
+		ramp.add_point(0.3, Color(1, 0.92, 0.55, 1.0))
+		ramp.add_point(0.7, Color(1, 0.85, 0.4, 1.0))
+		ramp.set_color(ramp.get_point_count() - 1, Color(1, 0.8, 0.3, 0.0))
+		p.color_ramp = ramp
+		var m := StandardMaterial3D.new()
+		m.vertex_color_use_as_albedo = true
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.emission_enabled = true
+		m.emission = Color(1, 0.85, 0.4)
+		m.emission_energy_multiplier = 2.0
+		var dot := SphereMesh.new()
+		dot.radius = 0.035
+		dot.height = 0.07
+		dot.radial_segments = 6
+		dot.rings = 3
+		dot.material = m
+		p.mesh = dot
+		p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(p)
+
+
+func _butterfly_flock() -> void:
+	var colors := [Color("#FF8FC8"), Color("#FFD34D"), Color("#7FD3FF"), Color("#C9A2FF"), Color("#FF9E6B")]
+	var areas := _meadow_areas()
+	for i in 7:
+		var a: Rect2 = areas[[0, 0, 1, 2, 2, 3, 0][i]]
+		var root := Node3D.new()
+		add_child(root)
+		var c: Color = colors[i % colors.size()]
+		var wing_mat := _std(c, 0.5, 0.3)
+		wing_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		var wings: Array = []
+		for s in [-1.0, 1.0]:
+			var pivot := Node3D.new()
+			root.add_child(pivot)
+			var w := BoxMesh.new()
+			w.size = Vector3(0.2, 0.01, 0.16)
+			_mesh(w, wing_mat, Vector3(s * 0.11, 0, 0), pivot)
+			pivot.set_meta("side", s)
+			wings.append(pivot)
+		_mesh(_capsule(0.02, 0.14), _std(Color("#3B2A55"), 0.5), Vector3.ZERO, root).rotation.x = PI / 2
+		_butterflies.append({node = root, wings = wings, center = a.get_center(),
+			rx = a.size.x * 0.4, rz = a.size.y * 0.35, speed = _rng.randf_range(0.12, 0.22), phase = _rng.randf() * TAU})
+
+
+func _process(delta: float) -> void:
+	_time += delta
+	var t := _time
+	for s in _swayers:
+		var n: Node3D = s[0]
+		n.rotation.z = sin(t * 1.1 + s[1]) * s[2]
+		n.rotation.x = cos(t * 0.9 + s[1]) * s[2] * 0.6
+	for b in _bouncers:
+		var n: Node3D = b[0]
+		var k := sin(t * 2.2 + b[1]) * 0.04
+		n.scale = Vector3(b[2] * (1.0 - k * 0.5), b[2] * (1.0 + k), b[2] * (1.0 - k * 0.5))
+	for l in _lanterns:
+		var f := 0.85 + 0.15 * sin(t * 7.0 + l[2]) * sin(t * 2.3 + l[2] * 1.7)
+		(l[0] as StandardMaterial3D).emission_energy_multiplier = 3.0 * f
+		(l[1] as OmniLight3D).light_energy = 1.2 * f
+	for g in _gate_lights:
+		(g[0] as OmniLight3D).light_energy = 1.3 + 0.7 * sin(t * 1.6 + g[1])
+	for e in _eyes:
+		var n: Node3D = e.node
+		if e.shut > 0.0:
+			e.shut -= delta
+			n.scale.y = 0.1
+			if e.shut <= 0.0:
+				n.scale.y = 1.0
+				e.next = _rng.randf_range(1.5, 5.0)
+		else:
+			e.next -= delta
+			if e.next <= 0.0:
+				e.shut = 0.14
+		n.rotation.y = sin(t * 0.7 + n.get_instance_id() % 7) * 0.4
+	for bf in _butterflies:
+		var n: Node3D = bf.node
+		var a: float = t * bf.speed + bf.phase
+		var c: Vector2 = bf.center
+		var pos := Vector3(c.x + cos(a) * bf.rx, 0.35 + sin(t * 2.0 + bf.phase) * 0.15, c.y + sin(a * 2.0) * bf.rz)
+		var ahead := Vector3(c.x + cos(a + 0.05) * bf.rx, pos.y, c.y + sin((a + 0.05) * 2.0) * bf.rz)
+		n.position = pos
+		if pos.distance_to(ahead) > 0.0001:
+			n.look_at(ahead, Vector3.UP)
+		var flap := sin(t * 18.0 + bf.phase) * 0.9
+		for w in bf.wings:
+			(w as Node3D).rotation.z = flap * float(w.get_meta("side"))
